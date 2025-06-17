@@ -359,21 +359,20 @@
         const ADMIN_PASSWORD = 'password123';
 
         // Firebase-Variablen, die von der initialisierenden `script type="module"` bereitgestellt werden
-        let db;
-        let auth;
-        let currentUserId;
-        let appId; // Muss auch hier im Modul-Scope verfügbar sein
+        // Diese werden direkt über `window.db`, `window.auth`, `window.currentUserId` referenziert
+        // anstatt lokale Variablen zu verwenden, um Timing-Probleme zu vermeiden.
+        // let db; // Entfernt
+        // let auth; // Entfernt
+        // let currentUserId; // Entfernt
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // Dies ist eine Konstante und ist sofort verfügbar.
 
         // Globale Firebase-Objekte nach Initialisierung übernehmen
         window.addEventListener('DOMContentLoaded', () => {
              // Warten, bis Firebase initialisiert und der Benutzer angemeldet ist
             const checkFirebaseReady = setInterval(() => {
                 if (window.db && window.auth && window.currentUserId) {
-                    db = window.db;
-                    auth = window.auth;
-                    currentUserId = window.currentUserId;
-                    appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // App ID hier auch abrufen
-
+                    // Keine Zuweisungen zu lokalen Variablen hier nötig,
+                    // da direkt window.db, window.auth, window.currentUserId verwendet werden.
                     clearInterval(checkFirebaseReady); // Stop checking once ready
                 }
             }, 100); // Check every 100ms
@@ -639,7 +638,8 @@
                 submitButton.disabled = !station.unlocked || station.submitted || !gameSessionActive;
                 submitButton.onclick = async () => {
                     if (!gameSessionActive || station.submitted) return; // Nichts tun, wenn das Spiel nicht aktiv ist oder bereits abgegeben ist
-                    if (!db || !currentUserId) {
+                    // HIER die Änderung: Verwende window.db und window.currentUserId
+                    if (!window.db || !window.currentUserId) {
                         showMessage('Datenbank oder Benutzer nicht verfügbar. Bitte warten Sie, bis Firebase initialisiert ist.');
                         return;
                     }
@@ -648,9 +648,10 @@
                         const confirm = await showMessage(`Möchten Sie Option "${station.selectedOption}" für "${station.station}" wirklich abgeben?`, true);
                         if (confirm) {
                             try {
-                                const submissionsRef = collection(db, `/artifacts/${appId}/public/data/submissions`);
+                                // HIER die Änderung: Verwende window.db
+                                const submissionsRef = collection(window.db, `/artifacts/${appId}/public/data/submissions`);
                                 await addDoc(submissionsRef, {
-                                    userId: currentUserId,
+                                    userId: window.currentUserId, // HIER die Änderung: Verwende window.currentUserId
                                     station: station.station,
                                     selectedOption: station.selectedOption,
                                     timestamp: serverTimestamp() // Firestore-Timestamp hinzufügen
@@ -793,7 +794,7 @@
         });
 
         // Event-Listener für das anklickbare Wort "Wähle"
-        openAdminTrigger.addEventListener('click', () => {
+        openAdminTrigger.addEventListener('click', async () => { // Async hinzufügen, da fetch() im Admin Login verwendet wird
             showPage(adminLoginPage); // Admin Login Seite anzeigen
         });
 
@@ -815,8 +816,9 @@
                 showMessage('Admin Login erfolgreich!');
                 showPage(adminDataPage); // Admin Daten Seite anzeigen
                 // Firestore-Listener für Admin-Daten einrichten
-                if (db) {
-                    const submissionsCollection = collection(db, `/artifacts/${appId}/public/data/submissions`);
+                // HIER die Änderung: Verwende window.db und window.currentUserId direkt
+                if (window.db && window.currentUserId) { 
+                    const submissionsCollection = collection(window.db, `/artifacts/${appId}/public/data/submissions`); 
                     onSnapshot(submissionsCollection, (snapshot) => {
                         const submittedItems = [];
                         snapshot.forEach(doc => {
@@ -828,7 +830,7 @@
                         showMessage('Fehler beim Laden der Admin-Daten.');
                     });
                 } else {
-                    showMessage('Datenbank nicht verfügbar. Admin-Daten können nicht geladen werden.');
+                    showMessage('Datenbank oder Benutzer nicht verfügbar. Bitte warten Sie, bis Firebase initialisiert ist.');
                 }
             } else {
                 showMessage('Benutzername oder Passwort falsch. Bitte versuchen Sie es erneut.');
