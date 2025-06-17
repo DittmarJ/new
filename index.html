@@ -337,7 +337,8 @@
 
         let timerInterval; // Variable für den Stoppuhr-Interval
         let seconds = 0; // Zähler für die Sekunden
-        let gameEnded = false; // Flag, um den Spielstatus zu verfolgen
+        let gameEnded = true; // Flag, um den Spielstatus zu verfolgen. Startet als "true", damit die Stoppuhr nicht sofort läuft.
+        let stopwatchRunning = false; // Neuer Flag, um zu verfolgen, ob die Stoppuhr aktiv läuft
 
         // Admin-Anmeldeinformationen (HARTEKODIERTE FÜR DEMONSTRATIONSZWECKE)
         const ADMIN_USERNAME = 'admin';
@@ -409,7 +410,8 @@
          * Startet die Stoppuhr.
          */
         function startStopwatch() {
-            if (!timerInterval) { // Verhindert mehrfaches Starten
+            if (!timerInterval && !stopwatchRunning) { // Verhindert mehrfaches Starten
+                stopwatchRunning = true; // Setze Flag auf true
                 timerInterval = setInterval(() => {
                     seconds++;
                     const formattedTime = formatTime(seconds);
@@ -425,6 +427,7 @@
         function stopStopwatch() {
             clearInterval(timerInterval);
             timerInterval = null;
+            stopwatchRunning = false; // Setze Flag auf false
         }
 
         /**
@@ -465,10 +468,12 @@
                 const handleBackToStart = () => {
                     hideMessage();
                     showPage(introPage); // Zurück zur Startseite
-                    // Reset game state for a fresh start if needed, e.g., seconds = 0; gameEnded = false;
-                    seconds = 0; // Reset seconds when returning to start page
-                    gameEnded = false; // Reset gameEnded flag
-                    // Also clear any game-specific data if a new game starts
+                    // Reset game state for a fresh start
+                    seconds = 0; 
+                    gameEnded = true; // Setze gameEnded auf true, damit Stoppuhr nicht automatisch startet
+                    stopwatchRunning = false; // Stoppuhr sollte nicht laufen
+                    stopStopwatch(); // Sicherstellen, dass der Timer gestoppt ist
+                    
                     stationsData.forEach(station => {
                         station.unlocked = false;
                         station.selectedOption = null;
@@ -479,7 +484,6 @@
                     gameStopwatchDisplay.textContent = '00:00'; // Reset stopwatch on game page
                     localStorage.removeItem('stopwatchSeconds'); // Ensure local storage is cleared
                     localStorage.removeItem('stopwatchStartTime'); // Ensure local storage is cleared
-                    startStopwatch(); // Start the stopwatch again for the intro page
                     resolve(true); // Kann auch true sein, da es eine beabsichtigte Aktion ist
                 };
 
@@ -670,7 +674,7 @@
             const confirmEnd = await showMessage('Möchten Sie das Spiel wirklich beenden?', true);
 
             if (confirmEnd) {
-                gameEnded = true;
+                gameEnded = true; // Spiel ist beendet
                 stopStopwatch(); // Stoppuhr anhalten
                 localStorage.removeItem('stopwatchSeconds'); // Stoppuhr-Zeit aus Local Storage entfernen
                 localStorage.removeItem('stopwatchStartTime'); // Startzeit entfernen
@@ -685,4 +689,105 @@
                 // Aktualisierte und formatierte Dankesnachricht
                 const finalMessage = `
                     <p class="text-xl font-bold mb-4">Vielen Dank für Ihre Teilnahme!</p>
-                    <p class="text-base mb-2">Sie haben ${submittedCo
+                    <p class="text-base mb-2">Sie haben ${submittedCount} von ${stationsData.length} Stationen abgegeben.</p>
+                    <p class="text-base mb-4">Ihre Gesamtzeit: <span class="font-bold">${formatTime(seconds)}</span></p>
+                    <p class="text-lg text-blue-700 font-semibold mb-4">Die Gewinner werden am Samstag, den 28. September 2025 ab 11 Uhr im Tutti Kiesi bekannt gegeben, schauen Sie gerne vorbei!</p>
+                    <p class="text-base">Um nichts mehr zu verpassen, folgen Sie uns jetzt auf Instagram!</p>
+                `;
+                
+                // Ruft showMessage mit dem neuen Parameter auf, um den "Zurück zur Startseite"-Button anzuzeigen
+                showMessage(finalMessage, false, true, true); // showConfirmButtons=false, isHtmlContent=true, showBackToStartButton=true
+
+                // Alle Eingaben und Buttons deaktivieren
+                renderTable(); // Tabelle neu rendern, um alle Elemente zu deaktivieren
+                endGameButton.disabled = true; // Spiel beenden Button deaktivieren
+            }
+        }
+
+        // --- Event-Listener ---
+
+        // Beim Laden der Seite: Initialisiere die Stoppuhr-Anzeige auf 00:00
+        // Die Stoppuhr wird erst beim Klick auf "Spiel starten" tatsächlich gestartet.
+        window.addEventListener('load', () => {
+            stopwatchDisplay.textContent = '00:00';
+            gameStopwatchDisplay.textContent = '00:00';
+        });
+
+        // Speichere die Stoppuhr-Zeit im Local Storage, bevor der Browser geschlossen wird
+        window.addEventListener('beforeunload', () => {
+            if (stopwatchRunning && !gameEnded) { // Nur speichern, wenn die Stoppuhr läuft und das Spiel nicht beendet wurde
+                localStorage.setItem('stopwatchSeconds', seconds.toString());
+                localStorage.setItem('stopwatchStartTime', Date.now().toString()); // Speichere den Zeitpunkt des Speicherns
+            }
+        });
+
+        startGameButton.addEventListener('click', () => {
+            if (gameEnded) { // Nur wenn das Spiel noch nicht gestartet oder beendet wurde
+                // Beim Starten des Spiels: Prüfen, ob eine gespeicherte Zeit vorhanden ist
+                const storedSeconds = localStorage.getItem('stopwatchSeconds');
+                const storedStartTime = localStorage.getItem('stopwatchStartTime');
+
+                if (storedSeconds && storedStartTime) {
+                    // Wenn Zeit und Startzeit gespeichert sind, berechne die verstrichene Zeit
+                    const elapsedMilliseconds = Date.now() - parseInt(storedStartTime);
+                    seconds = parseInt(storedSeconds) + Math.floor(elapsedMilliseconds / 1000);
+                } else {
+                    seconds = 0; // Bei 0 starten, wenn keine gespeicherte Zeit vorhanden ist
+                    localStorage.setItem('stopwatchStartTime', Date.now().toString()); // Startzeitpunkt speichern
+                }
+                gameEnded = false; // Spiel ist jetzt aktiv
+                startStopwatch(); // Stoppuhr starten
+            }
+            showPage(gamePage); // Spielseite anzeigen
+            renderTable(); // Tabelle zum ersten Mal rendern
+            gameStopwatchDisplay.textContent = formatTime(seconds); // Anzeige aktualisieren
+        });
+
+        // Event-Listener für das anklickbare Wort "Wähle"
+        openAdminTrigger.addEventListener('click', () => {
+            showPage(adminLoginPage); // Admin Login Seite anzeigen
+        });
+
+        backToIntroFromAdminLoginButton.addEventListener('click', () => {
+            showPage(introPage); // Zurück zur Startseite
+            adminUsernameInput.value = ''; // Felder leeren
+            adminPasswordInput.value = '';
+        });
+
+        backToIntroFromAdminDataButton.addEventListener('click', () => {
+            showPage(introPage); // Zurück zur Startseite
+        });
+
+        loginButton.addEventListener('click', async () => {
+            const username = adminUsernameInput.value;
+            const password = adminPasswordInput.value;
+
+            if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+                showMessage('Admin Login erfolgreich!');
+                showPage(adminDataPage); // Admin Daten Seite anzeigen
+                // Firestore-Listener für Admin-Daten einrichten
+                if (db) {
+                    const submissionsCollection = collection(db, `/artifacts/${appId}/public/data/submissions`);
+                    onSnapshot(submissionsCollection, (snapshot) => {
+                        const submittedItems = [];
+                        snapshot.forEach(doc => {
+                            submittedItems.push(doc.data());
+                        });
+                        renderAdminTable(submittedItems); // Admin-Tabelle aktualisieren
+                    }, (error) => {
+                        console.error("Fehler beim Abrufen der Admin-Daten:", error);
+                        showMessage('Fehler beim Laden der Admin-Daten.');
+                    });
+                } else {
+                    showMessage('Datenbank nicht verfügbar. Admin-Daten können nicht geladen werden.');
+                }
+            } else {
+                showMessage('Benutzername oder Passwort falsch. Bitte versuchen Sie es erneut.');
+                adminPasswordInput.value = ''; // Passwortfeld leeren
+            }
+        });
+
+        endGameButton.addEventListener('click', endGame);
+    </script>
+</body>
+</html>
