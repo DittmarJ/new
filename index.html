@@ -114,40 +114,6 @@
             width: 100%;
             max-width: 4xl;
         }
-
-        /* QR Scanner Overlay */
-        #qr-scanner-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-        }
-        #reader {
-            width: 500px; /* Adjust size as needed */
-            max-width: 90%; /* Responsive sizing */
-            border-radius: 8px;
-            overflow: hidden;
-            background-color: black;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
-        #qr-scanner-overlay button {
-            margin-top: 20px;
-            padding: 10px 20px;
-            background-color: #ef4444; /* Red-500 */
-            color: white;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background-color 0.2s ease;
-        }
-        #qr-scanner-overlay button:hover {
-            background-color: #dc2626; /* Red-600 */
-        }
     </style>
     <!-- Firebase SDKs -->
     <script type="module">
@@ -194,8 +160,6 @@
             console.error("Firebase Initialization Error:", e);
         }
     </script>
-    <!-- HTML5-QRCode-Bibliothek -->
-    <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body class="antialiased">
     <!-- Hauptcontainer für alle Seiten -->
@@ -312,6 +276,13 @@
                     Spiel beenden
                 </button>
             </div>
+            <!-- Neuer Bereich für die Zeit-Zusammenfassung -->
+            <div id="game-summary" class="hidden text-lg text-gray-700 mt-4 text-center p-4 bg-gray-100 rounded-lg shadow-inner w-full max-w-sm mx-auto">
+                <p class="font-bold text-gray-800 mb-2">Ihre Spielzeiten:</p>
+                <p>Messung gestartet: <span id="summary-start-time" class="font-semibold text-blue-700">N/A</span></p>
+                <p>Messung beendet: <span id="summary-end-time" class="font-semibold text-blue-700">N/A</span></p>
+                <p>Gesamtdauer: <span id="summary-duration" class="font-bold text-green-700 text-xl">N/A</span></p>
+            </div>
         </div>
     </div>
 
@@ -327,16 +298,10 @@
         </div>
     </div>
 
-    <!-- QR Scanner Overlay -->
-    <div id="qr-scanner-overlay" class="hidden">
-        <div class="flex flex-col items-center">
-            <div id="reader"></div>
-            <button id="close-qr-scanner-button">Scanner schließen</button>
-        </div>
-    </div>
-
     <script type="module">
         // Importe für Firestore (müssen im Type-Module-Script sein)
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Daten für die Tierstationen
@@ -371,6 +336,11 @@
         const endGameButton = document.getElementById('end-game-button');
         const stopwatchDisplay = document.getElementById('stopwatch');
         const gameStopwatchDisplay = document.getElementById('game-stopwatch');
+        const gameSummaryDiv = document.getElementById('game-summary'); // Neuer Referenz
+        const summaryStartTimeSpan = document.getElementById('summary-start-time');
+        const summaryEndTimeSpan = document.getElementById('summary-end-time');
+        const summaryDurationSpan = document.getElementById('summary-duration');
+
 
         const messageBox = document.getElementById('message-box');
         const messageContent = document.getElementById('message-content');
@@ -379,14 +349,10 @@
         const confirmNoButton = document.getElementById('confirm-no');
         const backToStartFromFinalButton = document.getElementById('back-to-start-from-final'); // Neuer Button
 
-        const qrScannerOverlay = document.getElementById('qr-scanner-overlay');
-        const closeQrScannerButton = document.getElementById('close-qr-scanner-button');
-        let html5QrCodeScanner; // Instanz des QR-Code-Scanners
-
-        let timerInterval; // Variable für den Stoppuhr-Interval
-        let seconds = 0; // Zähler für die Sekunden
-        let gameEnded = true; // Flag, um den Spielstatus zu verfolgen. Startet als "true", damit die Stoppuhr nicht sofort läuft.
-        let stopwatchRunning = false; // Neuer Flag, um zu verfolgen, ob die Stoppuhr aktiv läuft
+        let stopwatchIntervalId = null; // Variable für den Stoppuhr-Interval
+        let stopwatchStartTime = 0; // Der Startzeitpunkt der Messung (Timestamp des ersten Code-Eingabe)
+        let stopwatchEndTime = 0; // Der Endzeitpunkt der Messung (Timestamp des "Spiel beenden" Klicks)
+        let gameSessionActive = false; // Flag: true, wenn eine Spielsitzung aktiv ist
 
         // Admin-Anmeldeinformationen (HARTEKODIERTE FÜR DEMONSTRATIONSZWECKE)
         const ADMIN_USERNAME = 'admin';
@@ -407,11 +373,6 @@
                     auth = window.auth;
                     currentUserId = window.currentUserId;
                     appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // App ID hier auch abrufen
-
-                    // Initialisiere den QR-Code-Scanner
-                    html5QrCodeScanner = new Html5QrcodeScanner(
-                        "reader", { fps: 10, qrbox: { width: 250, height: 250 } }, /* verbose= */ false
-                    );
 
                     clearInterval(checkFirebaseReady); // Stop checking once ready
                 }
@@ -460,27 +421,37 @@
         }
 
         /**
-         * Startet die Stoppuhr.
+         * Aktualisiert die Stoppuhr-Anzeige basierend auf dem Startzeitpunkt.
+         * Diese Funktion wird im Intervall aufgerufen und direkt bei Seitenlast, wenn ein Spiel aktiv war.
+         */
+        function updateStopwatchDisplay() {
+            if (stopwatchStartTime === 0 || !gameSessionActive) { // Wenn die Uhr nicht läuft oder keine aktive Session
+                stopwatchDisplay.textContent = '00:00';
+                gameStopwatchDisplay.textContent = '00:00';
+                return;
+            }
+            const now = Date.now();
+            const elapsedSeconds = Math.floor((now - stopwatchStartTime) / 1000);
+            const formattedTime = formatTime(elapsedSeconds);
+            stopwatchDisplay.textContent = formattedTime;
+            gameStopwatchDisplay.textContent = formattedTime;
+        }
+
+        /**
+         * Startet die Stoppuhr (das Intervall, das die Anzeige aktualisiert).
          */
         function startStopwatch() {
-            if (!timerInterval && !stopwatchRunning) { // Verhindert mehrfaches Starten
-                stopwatchRunning = true; // Setze Flag auf true
-                timerInterval = setInterval(() => {
-                    seconds++;
-                    const formattedTime = formatTime(seconds);
-                    stopwatchDisplay.textContent = formattedTime;
-                    gameStopwatchDisplay.textContent = formattedTime; // Auch auf der Spielseite aktualisieren
-                }, 1000);
+            if (stopwatchIntervalId === null && gameSessionActive) { // Verhindert mehrfaches Starten
+                stopwatchIntervalId = setInterval(updateStopwatchDisplay, 1000);
             }
         }
 
         /**
-         * Stoppt die Stoppuhr.
+         * Stoppt die Stoppuhr (löscht das Intervall).
          */
         function stopStopwatch() {
-            clearInterval(timerInterval);
-            timerInterval = null;
-            stopwatchRunning = false; // Setze Flag auf false
+            clearInterval(stopwatchIntervalId);
+            stopwatchIntervalId = null;
         }
 
         /**
@@ -521,22 +492,22 @@
                 const handleBackToStart = () => {
                     hideMessage();
                     showPage(introPage); // Zurück zur Startseite
+                    
                     // Reset game state for a fresh start
-                    seconds = 0; 
-                    gameEnded = true; // Setze gameEnded auf true, damit Stoppuhr nicht automatisch startet
-                    stopwatchRunning = false; // Stoppuhr sollte nicht laufen
+                    stopwatchStartTime = 0; // Stoppuhr-Startzeit zurücksetzen
+                    stopwatchEndTime = 0; // Endzeit zurücksetzen
+                    gameSessionActive = false; // Spiel ist nicht mehr aktiv
                     stopStopwatch(); // Sicherstellen, dass der Timer gestoppt ist
+                    localStorage.removeItem('stopwatchStartTime'); // Local Storage löschen
                     
                     stationsData.forEach(station => {
                         station.unlocked = false;
                         station.selectedOption = null;
                         station.submitted = false;
                     });
-                    renderTable(); // Re-render table to reset state
-                    stopwatchDisplay.textContent = '00:00'; // Reset stopwatch on intro page
-                    gameStopwatchDisplay.textContent = '00:00'; // Reset stopwatch on game page
-                    localStorage.removeItem('stopwatchSeconds'); // Ensure local storage is cleared
-                    localStorage.removeItem('stopwatchStartTime'); // Ensure local storage is cleared
+                    renderTable(); // Tabelle neu rendern, um Status zurückzusetzen
+                    updateStopwatchDisplay(); // Anzeige auf 00:00 setzen
+                    gameSummaryDiv.classList.add('hidden'); // Zusammenfassung ausblenden
                     resolve(true); // Kann auch true sein, da es eine beabsichtigte Aktion ist
                 };
 
@@ -561,60 +532,6 @@
             messageBox.classList.remove('show');
         }
 
-        /**
-         * Startet den QR-Code-Scanner für eine spezifische Station.
-         * @param {number} stationIndex - Der Index der Station in `stationsData`.
-         */
-        async function startQrScanner(stationIndex) {
-            qrScannerOverlay.classList.remove('hidden'); // Scanner-Overlay anzeigen
-            
-            const station = stationsData[stationIndex];
-
-            const onScanSuccess = async (decodedText, decodedResult) => {
-                console.log(`QR Code erkannt: ${decodedText}`);
-                if (decodedText === station.code) {
-                    station.unlocked = true;
-                    showMessage(`Code für "${station.station}" korrekt! Auswahlfeld ist freigeschaltet.`);
-                } else {
-                    showMessage('Falscher QR-Code! Bitte scannen Sie den richtigen Code.');
-                }
-                renderTable(); // Tabelle aktualisieren
-                await stopQrScanner(); // Scanner stoppen und ausblenden
-            };
-
-            const onScanError = (errorMessage) => {
-                // Nur Fehler anzeigen, wenn sie nicht nur "No QR code found" sind
-                if (!errorMessage.includes("No QR code found")) {
-                    console.warn(`QR Scanner Error: ${errorMessage}`);
-                }
-            };
-
-            // Prüfen, ob die Kamera-Berechtigung erteilt wurde
-            try {
-                await html5QrCodeScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, onScanSuccess, onScanError);
-            } catch (err) {
-                console.error("Kamera-Zugriffsfehler:", err);
-                qrScannerOverlay.classList.add('hidden'); // Overlay ausblenden
-                showMessage('Kamera-Zugriff verweigert oder nicht verfügbar. Bitte erlauben Sie den Kamera-Zugriff, um QR-Codes zu scannen.');
-            }
-        }
-
-        /**
-         * Stoppt den QR-Code-Scanner und blendet das Overlay aus.
-         */
-        async function stopQrScanner() {
-            if (html5QrCodeScanner && html5QrCodeScanner.is
-            Scanning) { // isScanning ist nicht direkt verfügbar, aber ein guter Indikator
-                try {
-                    await html5QrCodeScanner.stop();
-                    console.log("QR-Scanner gestoppt.");
-                } catch (err) {
-                    console.warn("Fehler beim Stoppen des QR-Scanners:", err);
-                }
-            }
-            qrScannerOverlay.classList.add('hidden'); // Scanner-Overlay ausblenden
-        }
-
 
         /**
          * Rendert die Spieltabelle basierend auf den aktuellen Daten in `stationsData`.
@@ -631,21 +548,48 @@
                 stationTd.textContent = station.station;
                 row.appendChild(stationTd);
 
-                // Zelle für den Code-Eingabebereich (jetzt für QR-Scanner-Button)
+                // Zelle für den Code-Eingabebereich
                 const codeTd = document.createElement('td');
                 codeTd.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
 
-                // Button zum Starten des QR-Scanners
-                const scanQrButton = document.createElement('button');
-                scanQrButton.textContent = 'QR-Code scannen';
-                scanQrButton.className = 'px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50';
-                // Deaktiviert, wenn entsperrt, abgegeben oder Spiel beendet
-                scanQrButton.disabled = station.unlocked || station.submitted || gameEnded; 
-                scanQrButton.onclick = () => {
-                    if (gameEnded || station.submitted) return; // Nichts tun, wenn das Spiel beendet oder bereits abgegeben ist
-                    startQrScanner(index); // Scanner für diese Station starten
+                // Eingabefeld für den Code
+                const codeInput = document.createElement('input');
+                codeInput.type = 'text';
+                codeInput.placeholder = 'Code eingeben';
+                codeInput.className = 'border border-gray-300 rounded-md p-2 w-32 mr-2 focus:ring-blue-500 focus:border-blue-500';
+                codeInput.setAttribute('data-index', index);
+                // Deaktiviert, wenn entsperrt, abgegeben oder Spiel nicht aktiv ist
+                codeInput.disabled = station.unlocked || station.submitted || !gameSessionActive; 
+                codeTd.appendChild(codeInput);
+
+                // Button zum Entsperren der Optionen
+                const unlockButton = document.createElement('button');
+                unlockButton.textContent = 'Entsperren';
+                unlockButton.className = 'px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50';
+                // Deaktiviert, wenn entsperrt, abgegeben oder Spiel nicht aktiv ist
+                unlockButton.disabled = station.unlocked || station.submitted || !gameSessionActive; 
+                unlockButton.onclick = () => {
+                    // Nichts tun, wenn das Spiel nicht aktiv ist, beendet oder bereits abgegeben ist
+                    if (!gameSessionActive || station.submitted) return; 
+                    const enteredCode = codeInput.value.trim();
+                    if (enteredCode === station.code) {
+                        // Wenn dies der erste Code ist, der eingegeben wird, starte die Zeitmessung
+                        if (stopwatchStartTime === 0) {
+                            stopwatchStartTime = Date.now();
+                            localStorage.setItem('stopwatchStartTime', stopwatchStartTime.toString());
+                            startStopwatch(); // Sicherstellen, dass das Interval läuft
+                        }
+
+                        stationsData[index].unlocked = true;
+                        renderTable(); // Tabelle neu rendern, um Änderungen anzuzeigen
+                        showMessage(`Code für "${station.station}" korrekt! Auswahlfeld ist freigeschaltet.`);
+                        updateStopwatchDisplay(); // Anzeige sofort aktualisieren
+                    } else {
+                        showMessage('Falscher Code! Bitte versuchen Sie es erneut.');
+                        codeInput.value = '';
+                    }
                 };
-                codeTd.appendChild(scanQrButton);
+                codeTd.appendChild(unlockButton);
                 row.appendChild(codeTd);
 
                 // Zelle für das Dropdown-Feld "Auswahl"
@@ -654,7 +598,8 @@
 
                 const selectElement = document.createElement('select');
                 selectElement.className = 'select-field';
-                selectElement.disabled = !station.unlocked || station.submitted || gameEnded; // Deaktiviert, wenn nicht freigeschaltet, eingereicht oder Spiel beendet
+                // Deaktiviert, wenn nicht freigeschaltet, eingereicht oder Spiel nicht aktiv ist
+                selectElement.disabled = !station.unlocked || station.submitted || !gameSessionActive; 
 
                 const defaultOption = document.createElement('option');
                 defaultOption.value = '';
@@ -674,7 +619,7 @@
                 }
 
                 selectElement.onchange = (event) => {
-                    if (gameEnded || station.submitted) return; // Nichts tun, wenn das Spiel beendet oder bereits abgegeben ist
+                    if (!gameSessionActive || station.submitted) return; // Nichts tun, wenn das Spiel nicht aktiv ist oder bereits abgegeben ist
                     stationsData[index].selectedOption = event.target.value;
                 };
 
@@ -690,10 +635,10 @@
                 submitButton.className = `px-3 py-2 text-white rounded-md transition duration-200 focus:outline-none focus:ring-2 focus:ring-opacity-50 ${
                     station.submitted ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-500 hover:bg-purple-600 focus:ring-purple-500'
                 }`;
-                // Button deaktiviert, wenn nicht freigeschaltet, bereits abgegeben oder Spiel beendet
-                submitButton.disabled = !station.unlocked || station.submitted || gameEnded;
+                // Button deaktiviert, wenn nicht freigeschaltet, bereits abgegeben oder Spiel nicht aktiv ist
+                submitButton.disabled = !station.unlocked || station.submitted || !gameSessionActive;
                 submitButton.onclick = async () => {
-                    if (gameEnded || station.submitted) return; // Nichts tun, wenn das Spiel beendet oder bereits abgegeben ist
+                    if (!gameSessionActive || station.submitted) return; // Nichts tun, wenn das Spiel nicht aktiv ist oder bereits abgegeben ist
                     if (!db || !currentUserId) {
                         showMessage('Datenbank oder Benutzer nicht verfügbar. Bitte warten Sie, bis Firebase initialisiert ist.');
                         return;
@@ -761,35 +706,48 @@
          * Beendet das Spiel und zeigt eine Zusammenfassung an.
          */
         async function endGame() {
-            if (gameEnded) return; // Verhindert mehrfaches Beenden
+            if (!gameSessionActive) return; // Verhindert mehrfaches Beenden, wenn Spiel nicht aktiv
 
             const confirmEnd = await showMessage('Möchten Sie das Spiel wirklich beenden?', true);
 
             if (confirmEnd) {
-                gameEnded = true; // Spiel ist beendet
+                gameSessionActive = false; // Spiel ist beendet
                 stopStopwatch(); // Stoppuhr anhalten
-                localStorage.removeItem('stopwatchSeconds'); // Stoppuhr-Zeit aus Local Storage entfernen
-                localStorage.removeItem('stopwatchStartTime'); // Startzeit entfernen
+                localStorage.removeItem('stopwatchStartTime'); // Startzeit aus Local Storage entfernen
 
-                let submittedCount = 0;
-                stationsData.forEach(station => {
-                    if (station.submitted) {
-                        submittedCount++;
-                    }
-                });
+                // Nur berechnen und anzeigen, wenn stopwatchStartTime gesetzt wurde
+                if (stopwatchStartTime !== 0) {
+                    stopwatchEndTime = Date.now(); // Endzeitpunkt setzen
+                    const finalTimeElapsed = Math.floor((stopwatchEndTime - stopwatchStartTime) / 1000);
 
-                // Aktualisierte und formatierte Dankesnachricht
-                const finalMessage = `
-                    <p class="text-xl font-bold mb-4">Vielen Dank für Ihre Teilnahme!</p>
-                    <p class="text-base mb-2">Sie haben ${submittedCount} von ${stationsData.length} Stationen abgegeben.</p>
-                    <p class="text-base mb-4">Ihre Gesamtzeit: <span class="font-bold">${formatTime(seconds)}</span></p>
-                    <p class="text-lg text-blue-700 font-semibold mb-4">Die Gewinner werden am Samstag, den 28. September 2025 ab 11 Uhr im Tutti Kiesi bekannt gegeben, schauen Sie gerne vorbei!</p>
-                    <p class="text-base">Um nichts mehr zu verpassen, folgen Sie uns jetzt auf Instagram!</p>
-                `;
+                    // Aktualisiere den Zusammenfassungs-Div
+                    summaryStartTimeSpan.textContent = new Date(stopwatchStartTime).toLocaleString();
+                    summaryEndTimeSpan.textContent = new Date(stopwatchEndTime).toLocaleString();
+                    summaryDurationSpan.textContent = formatTime(finalTimeElapsed);
+                    gameSummaryDiv.classList.remove('hidden'); // Zusammenfassungs-Div anzeigen
+
+                    let submittedCount = 0;
+                    stationsData.forEach(station => {
+                        if (station.submitted) {
+                            submittedCount++;
+                        }
+                    });
+
+                    // Aktualisierte und formatierte Dankesnachricht
+                    const finalMessage = `
+                        <p class="text-xl font-bold mb-4">Vielen Dank für Ihre Teilnahme!</p>
+                        <p class="text-base mb-2">Sie haben ${submittedCount} von ${stationsData.length} Stationen abgegeben.</p>
+                        <p class="text-base mb-4">Ihre Gesamtzeit: <span class="font-bold">${formatTime(finalTimeElapsed)}</span></p>
+                        <p class="text-lg text-blue-700 font-semibold mb-4">Die Gewinner werden am Samstag, den 28. September 2025 ab 11 Uhr im Tutti Kiesi bekannt gegeben, schauen Sie gerne vorbei!</p>
+                        <p class="text-base">Um nichts mehr zu verpassen, folgen Sie uns jetzt auf Instagram!</p>
+                    `;
+                    showMessage(finalMessage, false, true, true);
+                } else {
+                    // Fall, dass Spiel beendet wurde, aber nie ein Code eingegeben wurde
+                    showMessage('Das Spiel wurde beendet. Es wurde jedoch keine Zeitmessung gestartet, da kein Code eingegeben wurde.', false, false, true);
+                    gameSummaryDiv.classList.add('hidden'); // Zusammenfassung ausblenden, da keine Daten
+                }
                 
-                // Ruft showMessage mit dem neuen Parameter auf, um den "Zurück zur Startseite"-Button anzuzeigen
-                showMessage(finalMessage, false, true, true); // showConfirmButtons=false, isHtmlContent=true, showBackToStartButton=true
-
                 // Alle Eingaben und Buttons deaktivieren
                 renderTable(); // Tabelle neu rendern, um alle Elemente zu deaktivieren
                 endGameButton.disabled = true; // Spiel beenden Button deaktivieren
@@ -798,40 +756,40 @@
 
         // --- Event-Listener ---
 
-        // Beim Laden der Seite: Initialisiere die Stoppuhr-Anzeige auf 00:00
+        // Beim Laden der Seite: Prüfen, ob ein Spiel aktiv war und Stoppuhr fortsetzen
         window.addEventListener('load', () => {
-            stopwatchDisplay.textContent = '00:00';
-            gameStopwatchDisplay.textContent = '00:00';
+            const storedStartTime = localStorage.getItem('stopwatchStartTime');
+
+            if (storedStartTime) {
+                stopwatchStartTime = parseInt(storedStartTime);
+                gameSessionActive = true; // Spiel war aktiv, fortsetzen
+                updateStopwatchDisplay(); // Sofortige Anzeige der korrekten Zeit
+                startStopwatch(); // Timer-Intervall starten
+            } else {
+                updateStopwatchDisplay(); // Anzeige auf 00:00 setzen
+            }
+            // Sicherstellen, dass die Tabelle bei Seitenlast im richtigen Zustand ist
+            renderTable();
+            gameSummaryDiv.classList.add('hidden'); // Verstecke die Zusammenfassung beim Laden
         });
 
-        // Speichere die Stoppuhr-Zeit im Local Storage, bevor der Browser geschlossen wird
+        // Speichere den Startzeitpunkt im Local Storage, bevor der Browser geschlossen wird
         window.addEventListener('beforeunload', () => {
-            if (stopwatchRunning && !gameEnded) { // Nur speichern, wenn die Stoppuhr läuft und das Spiel nicht beendet wurde
-                localStorage.setItem('stopwatchSeconds', seconds.toString());
-                localStorage.setItem('stopwatchStartTime', Date.now().toString()); // Speichere den Zeitpunkt des Speicherns
+            if (gameSessionActive && stopwatchStartTime !== 0) { // Nur speichern, wenn das Spiel aktiv ist und eine Messung gestartet wurde
+                localStorage.setItem('stopwatchStartTime', stopwatchStartTime.toString()); 
             }
         });
 
         startGameButton.addEventListener('click', () => {
-            if (gameEnded) { // Nur wenn das Spiel noch nicht gestartet oder beendet wurde
-                // Beim Starten des Spiels: Prüfen, ob eine gespeicherte Zeit vorhanden ist
-                const storedSeconds = localStorage.getItem('stopwatchSeconds');
-                const storedStartTime = localStorage.getItem('stopwatchStartTime');
-
-                if (storedSeconds && storedStartTime) {
-                    // Wenn Zeit und Startzeit gespeichert sind, berechne die verstrichene Zeit
-                    const elapsedMilliseconds = Date.now() - parseInt(storedStartTime);
-                    seconds = parseInt(storedSeconds) + Math.floor(elapsedMilliseconds / 1000);
-                } else {
-                    seconds = 0; // Bei 0 starten, wenn keine gespeicherte Zeit vorhanden ist
-                    localStorage.setItem('stopwatchStartTime', Date.now().toString()); // Startzeitpunkt speichern
-                }
-                gameEnded = false; // Spiel ist jetzt aktiv
-                startStopwatch(); // Stoppuhr starten
+            if (!gameSessionActive) { // Nur wenn keine Spielsitzung aktiv ist
+                // stopwatchStartTime bleibt 0, wird erst beim ersten Code-Eingabe gesetzt
+                gameSessionActive = true; // Spielsitzung wird aktiv
+                endGameButton.disabled = false; // "Spiel beenden" Button aktivieren
             }
             showPage(gamePage); // Spielseite anzeigen
-            renderTable(); // Tabelle zum ersten Mal rendern
-            gameStopwatchDisplay.textContent = formatTime(seconds); // Anzeige aktualisieren
+            renderTable(); // Tabelle zum ersten Mal rendern (oder neu rendern)
+            updateStopwatchDisplay(); // Anzeige aktualisieren
+            startStopwatch(); // Stoppuhr starten (oder sicherstellen, dass sie läuft)
         });
 
         // Event-Listener für das anklickbare Wort "Wähle"
@@ -879,9 +837,6 @@
         });
 
         endGameButton.addEventListener('click', endGame);
-
-        // Event-Listener für den Schließen-Button des QR-Scanners
-        closeQrScannerButton.addEventListener('click', stopQrScanner);
     </script>
 </body>
 </html>
