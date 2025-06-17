@@ -114,6 +114,40 @@
             width: 100%;
             max-width: 4xl;
         }
+
+        /* QR Scanner Overlay */
+        #qr-scanner-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        #reader {
+            width: 500px; /* Adjust size as needed */
+            max-width: 90%; /* Responsive sizing */
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: black;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        #qr-scanner-overlay button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #ef4444; /* Red-500 */
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        #qr-scanner-overlay button:hover {
+            background-color: #dc2626; /* Red-600 */
+        }
     </style>
     <!-- Firebase SDKs -->
     <script type="module">
@@ -160,6 +194,8 @@
             console.error("Firebase Initialization Error:", e);
         }
     </script>
+    <!-- HTML5-QRCode-Bibliothek -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body class="antialiased">
     <!-- Hauptcontainer für alle Seiten -->
@@ -291,6 +327,14 @@
         </div>
     </div>
 
+    <!-- QR Scanner Overlay -->
+    <div id="qr-scanner-overlay" class="hidden">
+        <div class="flex flex-col items-center">
+            <div id="reader"></div>
+            <button id="close-qr-scanner-button">Scanner schließen</button>
+        </div>
+    </div>
+
     <script type="module">
         // Importe für Firestore (müssen im Type-Module-Script sein)
         import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -335,6 +379,10 @@
         const confirmNoButton = document.getElementById('confirm-no');
         const backToStartFromFinalButton = document.getElementById('back-to-start-from-final'); // Neuer Button
 
+        const qrScannerOverlay = document.getElementById('qr-scanner-overlay');
+        const closeQrScannerButton = document.getElementById('close-qr-scanner-button');
+        let html5QrCodeScanner; // Instanz des QR-Code-Scanners
+
         let timerInterval; // Variable für den Stoppuhr-Interval
         let seconds = 0; // Zähler für die Sekunden
         let gameEnded = true; // Flag, um den Spielstatus zu verfolgen. Startet als "true", damit die Stoppuhr nicht sofort läuft.
@@ -359,6 +407,11 @@
                     auth = window.auth;
                     currentUserId = window.currentUserId;
                     appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // App ID hier auch abrufen
+
+                    // Initialisiere den QR-Code-Scanner
+                    html5QrCodeScanner = new Html5QrcodeScanner(
+                        "reader", { fps: 10, qrbox: { width: 250, height: 250 } }, /* verbose= */ false
+                    );
 
                     clearInterval(checkFirebaseReady); // Stop checking once ready
                 }
@@ -509,6 +562,61 @@
         }
 
         /**
+         * Startet den QR-Code-Scanner für eine spezifische Station.
+         * @param {number} stationIndex - Der Index der Station in `stationsData`.
+         */
+        async function startQrScanner(stationIndex) {
+            qrScannerOverlay.classList.remove('hidden'); // Scanner-Overlay anzeigen
+            
+            const station = stationsData[stationIndex];
+
+            const onScanSuccess = async (decodedText, decodedResult) => {
+                console.log(`QR Code erkannt: ${decodedText}`);
+                if (decodedText === station.code) {
+                    station.unlocked = true;
+                    showMessage(`Code für "${station.station}" korrekt! Auswahlfeld ist freigeschaltet.`);
+                } else {
+                    showMessage('Falscher QR-Code! Bitte scannen Sie den richtigen Code.');
+                }
+                renderTable(); // Tabelle aktualisieren
+                await stopQrScanner(); // Scanner stoppen und ausblenden
+            };
+
+            const onScanError = (errorMessage) => {
+                // Nur Fehler anzeigen, wenn sie nicht nur "No QR code found" sind
+                if (!errorMessage.includes("No QR code found")) {
+                    console.warn(`QR Scanner Error: ${errorMessage}`);
+                }
+            };
+
+            // Prüfen, ob die Kamera-Berechtigung erteilt wurde
+            try {
+                await html5QrCodeScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, onScanSuccess, onScanError);
+            } catch (err) {
+                console.error("Kamera-Zugriffsfehler:", err);
+                qrScannerOverlay.classList.add('hidden'); // Overlay ausblenden
+                showMessage('Kamera-Zugriff verweigert oder nicht verfügbar. Bitte erlauben Sie den Kamera-Zugriff, um QR-Codes zu scannen.');
+            }
+        }
+
+        /**
+         * Stoppt den QR-Code-Scanner und blendet das Overlay aus.
+         */
+        async function stopQrScanner() {
+            if (html5QrCodeScanner && html5QrCodeScanner.is
+            Scanning) { // isScanning ist nicht direkt verfügbar, aber ein guter Indikator
+                try {
+                    await html5QrCodeScanner.stop();
+                    console.log("QR-Scanner gestoppt.");
+                } catch (err) {
+                    console.warn("Fehler beim Stoppen des QR-Scanners:", err);
+                }
+            }
+            qrScannerOverlay.classList.add('hidden'); // Scanner-Overlay ausblenden
+        }
+
+
+        /**
          * Rendert die Spieltabelle basierend auf den aktuellen Daten in `stationsData`.
          */
         function renderTable() {
@@ -523,37 +631,21 @@
                 stationTd.textContent = station.station;
                 row.appendChild(stationTd);
 
-                // Zelle für den Code-Eingabebereich
+                // Zelle für den Code-Eingabebereich (jetzt für QR-Scanner-Button)
                 const codeTd = document.createElement('td');
                 codeTd.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
 
-                // Eingabefeld für den Code
-                const codeInput = document.createElement('input');
-                codeInput.type = 'text';
-                codeInput.placeholder = 'Code eingeben';
-                codeInput.className = 'border border-gray-300 rounded-md p-2 w-32 mr-2 focus:ring-blue-500 focus:border-blue-500';
-                codeInput.setAttribute('data-index', index);
-                codeInput.disabled = station.unlocked || station.submitted || gameEnded; // Deaktiviert, wenn entsperrt, abgegeben oder Spiel beendet
-                codeTd.appendChild(codeInput);
-
-                // Button zum Entsperren der Optionen
-                const unlockButton = document.createElement('button');
-                unlockButton.textContent = 'Entsperren';
-                unlockButton.className = 'px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50';
-                unlockButton.disabled = station.unlocked || station.submitted || gameEnded; // Deaktiviert, wenn entsperrt, abgegeben oder Spiel beendet
-                unlockButton.onclick = () => {
+                // Button zum Starten des QR-Scanners
+                const scanQrButton = document.createElement('button');
+                scanQrButton.textContent = 'QR-Code scannen';
+                scanQrButton.className = 'px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50';
+                // Deaktiviert, wenn entsperrt, abgegeben oder Spiel beendet
+                scanQrButton.disabled = station.unlocked || station.submitted || gameEnded; 
+                scanQrButton.onclick = () => {
                     if (gameEnded || station.submitted) return; // Nichts tun, wenn das Spiel beendet oder bereits abgegeben ist
-                    const enteredCode = codeInput.value.trim();
-                    if (enteredCode === station.code) {
-                        stationsData[index].unlocked = true;
-                        renderTable(); // Tabelle neu rendern, um Änderungen anzuzeigen
-                        showMessage(`Code für "${station.station}" korrekt! Auswahlfeld ist freigeschaltet.`);
-                    } else {
-                        showMessage('Falscher Code! Bitte versuchen Sie es erneut.');
-                        codeInput.value = '';
-                    }
+                    startQrScanner(index); // Scanner für diese Station starten
                 };
-                codeTd.appendChild(unlockButton);
+                codeTd.appendChild(scanQrButton);
                 row.appendChild(codeTd);
 
                 // Zelle für das Dropdown-Feld "Auswahl"
@@ -707,7 +799,6 @@
         // --- Event-Listener ---
 
         // Beim Laden der Seite: Initialisiere die Stoppuhr-Anzeige auf 00:00
-        // Die Stoppuhr wird erst beim Klick auf "Spiel starten" tatsächlich gestartet.
         window.addEventListener('load', () => {
             stopwatchDisplay.textContent = '00:00';
             gameStopwatchDisplay.textContent = '00:00';
@@ -788,6 +879,9 @@
         });
 
         endGameButton.addEventListener('click', endGame);
+
+        // Event-Listener für den Schließen-Button des QR-Scanners
+        closeQrScannerButton.addEventListener('click', stopQrScanner);
     </script>
 </body>
 </html>
