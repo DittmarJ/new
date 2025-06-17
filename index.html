@@ -1,268 +1,688 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <title>Anmeldung Ausflugswoche</title>
-  <style>
-    body { max-width: 700px; margin: auto; font-family: Arial, sans-serif; padding: 20px; }
-    h1 { cursor: pointer; color: #333; }
-    .day-card { border: 1px solid #ccc; border-radius: 6px; padding: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
-    button { padding: 8px 16px; font-size: 16px; cursor: pointer; }
-    input, label { font-size: 16px; margin-bottom: 10px; display: block; width: 100%; }
-    label > input { display: inline-block; width: auto; margin-right: 8px; }
-    .admin-list { background: #eee; padding: 10px; border-radius: 6px; margin-bottom: 20px; }
-    ul { padding-left: 20px; }
-    .error { color: red; margin-top: 10px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tierstationen-Spiel</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif; /* Standard-Schriftart */
+            background-color: #f0f4f8; /* Heller Hintergrund */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh; /* Mindesthöhe des Viewports */
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        table {
+            border-collapse: separate; /* Für abgerundete Ecken */
+            border-spacing: 0; /* Entfernt den Standard-Zellenabstand */
+        }
+        th, td {
+            padding: 12px 15px; /* Innenabstand für Zellen */
+            text-align: left; /* Textausrichtung */
+        }
+        th {
+            background-color: #4a5568; /* Dunklerer Header-Hintergrund */
+            color: #ffffff; /* Weiße Schrift im Header */
+            font-weight: bold; /* Fette Schrift */
+        }
+        tr:nth-child(even) {
+            background-color: #edf2f7; /* Zebrastreifen-Effekt */
+        }
+        tr:nth-child(odd) {
+            background-color: #ffffff; /* Weiße Zeilen */
+        }
+        /* Abgerundete Ecken für die erste und letzte Header-Zelle */
+        th:first-child {
+            border-top-left-radius: 8px;
+        }
+        th:last-child {
+            border-top-right-radius: 8px;
+        }
+        /* Abgerundete Ecken für die erste und letzte Zelle der letzten Zeile */
+        tr:last-child td:first-child {
+            border-bottom-left-radius: 8px;
+        }
+        tr:last-child td:last-child {
+            border-bottom-right-radius: 8px;
+        }
+
+        /* Stil für die Meldungsbox */
+        .message-box {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            border: 1px solid #cbd5e0;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            text-align: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+            max-width: 90%;
+        }
+
+        .message-box.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        /* Verbesserte Formatierung für den Inhalt der Meldungsbox */
+        #message-content {
+            white-space: pre-line; /* Behält Zeilenumbrüche bei */
+            text-align: center;
+            padding: 10px 0;
+        }
+
+        /* Stil für das Dropdown-Feld */
+        .select-field {
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            padding: 8px 12px;
+            background-color: #ffffff;
+            font-size: 0.875rem; /* text-sm */
+            line-height: 1.25rem; /* leading-5 */
+            color: #4a5568; /* text-gray-700 */
+            width: 100%;
+            max-width: 150px;
+            transition: all 0.2s ease-in-out;
+        }
+        .select-field:focus {
+            outline: none;
+            border-color: #3b82f6; /* blue-500 */
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); /* ring-blue-500 */
+        }
+        .select-field:disabled {
+            background-color: #e2e8f0; /* gray-200 */
+            cursor: not-allowed;
+            color: #718096; /* gray-500 */
+        }
+
+        /* Stil für Hauptseiten-Container */
+        .page-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            width: 100%;
+            max-width: 4xl;
+        }
+    </style>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global zugänglich machen
+        window.firebaseApp = null;
+        window.db = null;
+        window.auth = null;
+        window.currentUserId = null;
+
+        // Sicherstellen, dass __app_id und __firebase_config definiert sind
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+        try {
+            window.firebaseApp = initializeApp(firebaseConfig);
+            window.db = getFirestore(window.firebaseApp);
+            window.auth = getAuth(window.firebaseApp);
+
+            // Anonyme Anmeldung oder mit Custom Token
+            onAuthStateChanged(window.auth, async (user) => {
+                if (user) {
+                    window.currentUserId = user.uid;
+                    console.log('Firebase: User signed in with UID:', window.currentUserId);
+                } else {
+                    console.log('Firebase: No user signed in. Attempting anonymous sign-in...');
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(window.auth, __initial_auth_token);
+                            console.log('Firebase: Signed in with custom token.');
+                        } else {
+                            await signInAnonymously(window.auth);
+                            console.log('Firebase: Signed in anonymously.');
+                        }
+                    } catch (error) {
+                        console.error('Firebase Auth Error:', error);
+                    }
+                }
+            });
+        } catch (e) {
+            console.error("Firebase Initialization Error:", e);
+        }
+    </script>
 </head>
-<body>
-  <h1 id="title" title="Klick hier (geheim!)">Anmeldung Ausflugswoche</h1>
+<body class="antialiased">
+    <!-- Hauptcontainer für alle Seiten -->
+    <div class="page-container">
+        <!-- Startseite -->
+        <div id="intro-page" class="bg-white shadow-lg rounded-lg p-8 w-full max-w-lg text-center flex flex-col items-center justify-center">
+            <h1 class="text-4xl font-extrabold text-gray-800 mb-6 tracking-tight">
+                Willkommen zur Tierstationen-App!
+            </h1>
+            <p class="text-lg text-gray-600 mb-8">
+                Gib den richtigen Code für jede Tierstation ein, um die Auswahloptionen freizuschalten.
+                <span id="open-admin-trigger">Wähle</span> dann die passende Option aus und bestätige deine Eingabe. Die Zeit läuft!
+            </p>
+            <div class="text-5xl font-bold text-blue-600 mb-8">
+                <span id="stopwatch">00:00</span>
+            </div>
+            <div class="flex flex-col space-y-4">
+                <button id="start-game-button" class="px-8 py-4 bg-green-600 text-white text-xl font-semibold rounded-lg hover:bg-green-700 transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 shadow-lg">
+                    Spiel starten
+                </button>
+            </div>
+        </div>
 
-  <div id="admin-login" style="display:none; margin-bottom:20px;">
-    <input type="password" id="admin-pass" placeholder="Admin Passwort" />
-    <button id="btn-admin-login">Einloggen</button>
-    <p id="admin-login-msg" class="error"></p>
-  </div>
+        <!-- Admin Login Seite (anfangs versteckt) -->
+        <div id="admin-login-page" class="hidden bg-white shadow-lg rounded-lg p-8 w-full max-w-lg text-center flex flex-col items-center justify-center">
+            <h2 class="text-3xl font-extrabold text-gray-800 mb-6 tracking-tight">
+                Admin Login
+            </h2>
+            <input type="text" id="admin-username" placeholder="Benutzername" class="w-full p-3 mb-4 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+            <input type="password" id="admin-password" placeholder="Passwort" class="w-full p-3 mb-6 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+            <button id="login-button" class="px-8 py-4 bg-indigo-600 text-white text-xl font-semibold rounded-lg hover:bg-indigo-700 transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50 shadow-lg mb-4">
+                Login
+            </button>
+            <button id="back-to-intro-from-admin-login" class="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition duration-200">
+                Zurück
+            </button>
+        </div>
 
-  <div id="admin-area" style="display:none;">
-    <h2>Admin-Bereich</h2>
-    <div id="registrations-container"></div>
-    <button id="btn-download">Daten herunterladen</button>
-    <button id="btn-logout" style="margin-left: 10px;">Logout</button>
-  </div>
+        <!-- Admin Data Seite (anfangs versteckt) -->
+        <div id="admin-data-page" class="hidden bg-white shadow-lg rounded-lg p-4 w-full max-w-4xl">
+            <h2 class="text-3xl font-extrabold text-center text-gray-800 mb-8 tracking-tight">
+                Abgegebene Stationen (Admin)
+            </h2>
+            <div class="overflow-x-auto rounded-lg border border-gray-200 mb-6">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-700">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider rounded-tl-lg">
+                                Benutzer ID
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                                Station
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                                Ausgewählte Option
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider rounded-tr-lg">
+                                Abgabezeit
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-data-table-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Admin-Daten werden dynamisch mit JavaScript gefüllt -->
+                        <tr>
+                            <td colspan="4" class="px-6 py-4 text-center text-gray-500">
+                                Lade Daten...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <button id="back-to-intro-from-admin-data" class="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition duration-200">
+                Zurück zur Startseite
+            </button>
+        </div>
 
-  <div id="registration-form">
-    <input type="text" id="vorname" placeholder="Vorname des Teilnehmers" />
-    <input type="text" id="nachname" placeholder="Nachname des Teilnehmers" />
-    <input type="email" id="email" placeholder="E-Mail" />
-    <input type="tel" id="notfalltelefon" placeholder="Notfalltelefon" />
-    <label><input type="checkbox" id="consent" /> Ich bin einverstanden, dass meine Daten in Firebase gespeichert werden.</label>
-  </div>
+        <!-- Spielseite (anfangs versteckt) -->
+        <div id="game-page" class="hidden bg-white shadow-lg rounded-lg p-4 w-full max-w-4xl">
+            <h1 class="text-3xl font-extrabold text-center text-gray-800 mb-8 tracking-tight">
+                Tierstationen Übersicht
+            </h1>
 
-  <div id="days-container"></div>
+            <div class="flex justify-end mb-4 text-2xl font-bold text-blue-600">
+                Zeit: <span id="game-stopwatch">00:00</span>
+            </div>
 
-  <p id="message" class="error"></p>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-    import {
-      getFirestore,
-      collection,
-      addDoc,
-      query,
-      where,
-      getDocs,
-      onSnapshot
-    } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+            <div class="overflow-x-auto rounded-lg border border-gray-200 mb-6">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-700">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider rounded-tl-lg">
+                                Station
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                                Code
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                                Auswahl
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider rounded-tr-lg">
+                                Aktion
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Tabelle wird dynamisch mit JavaScript gefüllt -->
+                    </tbody>
+                </table>
+            </div>
 
-    // Firebase Config
-    const firebaseConfig = {
-      apiKey: "AIzaSyCTJpnromzdpR1BIhfAV7kFaqDnoUokwhA",
-      authDomain: "ausflugswocheanmeldung.firebaseapp.com",
-      projectId: "ausflugswocheanmeldung",
-      storageBucket: "ausflugswocheanmeldung.firebasestorage.app",
-      messagingSenderId: "88455659109",
-      appId: "1:88455659109:web:a5a6220b659abb8e93d08c",
-      measurementId: "G-NCJC8XBSY6"
-    };
+            <div class="flex justify-center mt-6">
+                <button id="end-game-button" class="px-6 py-3 bg-red-600 text-white text-lg font-semibold rounded-lg hover:bg-red-700 transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-500 focus:ring-opacity-50 shadow-lg">
+                    Spiel beenden
+                </button>
+            </div>
+        </div>
+    </div>
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    <!-- Meldungsbox -->
+    <div id="message-box" class="message-box">
+        <p id="message-content" class="text-lg font-semibold text-gray-800 mb-4"></p>
+        <div class="flex justify-center space-x-4 mt-4">
+            <button id="confirm-yes" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-200 hidden">Ja</button>
+            <button id="confirm-no" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition duration-200 hidden">Nein</button>
+            <button id="close-message" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200 hidden">Schließen</button>
+            <!-- Neuer Button für die finale Nachricht -->
+            <button id="back-to-start-from-final" class="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition duration-200 hidden">Zurück zur Startseite</button>
+        </div>
+    </div>
 
-    const activities = [
-      { day: "Montag", title: "Tiere im Wald", location: "Wildgehege Bad Säckingen", price: 5 },
-      { day: "Dienstag", title: "Feuer machen im Wald", location: "Grillplatz Herten", price: 5 },
-      { day: "Mittwoch", title: "Fernsehturm? Was ist das?", location: "St. Chrischona Fernsehturm", price: 5 },
-      { day: "Donnerstag", title: "Tierpark", location: "Lange Erlen", price: 5 },
-      { day: "Freitag", title: "Was lebt, aber wir nicht sehen", location: "Tschamberhöhle Rheinfelden", price: 10 },
-    ];
+    <script type="module">
+        // Importe für Firestore (müssen im Type-Module-Script sein)
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    const title = document.getElementById("title");
-    const adminLoginDiv = document.getElementById("admin-login");
-    const adminPassInput = document.getElementById("admin-pass");
-    const adminLoginMsg = document.getElementById("admin-login-msg");
-    const btnAdminLogin = document.getElementById("btn-admin-login");
-    const adminArea = document.getElementById("admin-area");
-    const registrationsContainer = document.getElementById("registrations-container");
-    const btnDownload = document.getElementById("btn-download");
-    const btnLogout = document.getElementById("btn-logout");
+        // Daten für die Tierstationen
+        const stationsData = [
+            { station: 'Löwe', code: 'L-001', options: { a: '25', b: 'Ja', c: 'Rot', d: '1.8m', e: 'Aktiv' }, unlocked: false, selectedOption: null, submitted: false },
+            { station: 'Tiger', code: 'T-002', options: { a: '18', b: 'Nein', c: 'Gelb', d: '2.2m', e: 'Schlafend' }, unlocked: false, selectedOption: null, submitted: false },
+            { station: 'Elefant', code: 'E-003', options: { a: '40', b: 'Ja', c: 'Grau', d: '3.5m', e: 'Fressend' }, unlocked: false, selectedOption: null, submitted: false },
+            { station: 'Giraffe', code: 'G-004', options: { a: '12', b: 'Ja', c: 'Braun', d: '5.0m', e: 'Stehend' }, unlocked: false, selectedOption: null, submitted: false },
+            { station: 'Pinguin', code: 'P-005', options: { a: '5', b: 'Nein', c: 'Schwarz-Weiß', d: '0.7m', e: 'Schwimmend' }, unlocked: false, selectedOption: null, submitted: false },
+            { station: 'Zebra', code: 'Z-006', options: { a: '10', b: 'Ja', c: 'Schwarz-Weiß', d: '1.6m', e: 'Grasend' }, unlocked: false, selectedOption: null, submitted: false }
+        ];
 
-    const vornameInput = document.getElementById("vorname");
-    const nachnameInput = document.getElementById("nachname");
-    const emailInput = document.getElementById("email");
-    const notfallInput = document.getElementById("notfalltelefon");
-    const consentInput = document.getElementById("consent");
+        // Referenzen auf DOM-Elemente
+        const introPage = document.getElementById('intro-page');
+        const gamePage = document.getElementById('game-page');
+        const adminLoginPage = document.getElementById('admin-login-page');
+        const adminDataPage = document.getElementById('admin-data-page');
 
-    const daysContainer = document.getElementById("days-container");
-    const message = document.getElementById("message");
+        const startGameButton = document.getElementById('start-game-button');
+        const openAdminTrigger = document.getElementById('open-admin-trigger'); // Trigger für Admin-Login
+        
+        const backToIntroFromAdminLoginButton = document.getElementById('back-to-intro-from-admin-login');
+        const backToIntroFromAdminDataButton = document.getElementById('back-to-intro-from-admin-data');
 
-    let adminMode = false;
-    let registrations = {};
+        const adminUsernameInput = document.getElementById('admin-username');
+        const adminPasswordInput = document.getElementById('admin-password');
+        const loginButton = document.getElementById('login-button');
+        const adminDataTableBody = document.getElementById('admin-data-table-body');
 
-    // Titel Klick: Admin Login einblenden
-    title.addEventListener("click", () => {
-      if (!adminMode) {
-        adminLoginDiv.style.display = "block";
-        adminPassInput.focus();
-        message.textContent = "";
-      }
-    });
 
-    // Admin Login Button
-    btnAdminLogin.addEventListener("click", () => {
-      const pw = adminPassInput.value.trim();
-      if (pw === "geheim123") {
-        adminMode = true;
-        adminLoginDiv.style.display = "none";
-        adminArea.style.display = "block";
-        adminPassInput.value = "";
-        adminLoginMsg.textContent = "";
-        message.textContent = "";
-        startAdminListener();
-      } else {
-        adminLoginMsg.textContent = "Falsches Passwort!";
-      }
-    });
+        const tableBody = document.getElementById('table-body');
+        const endGameButton = document.getElementById('end-game-button');
+        const stopwatchDisplay = document.getElementById('stopwatch');
+        const gameStopwatchDisplay = document.getElementById('game-stopwatch');
 
-    // Admin Logout
-    btnLogout.addEventListener("click", () => {
-      adminMode = false;
-      adminArea.style.display = "none";
-      registrationsContainer.innerHTML = "";
-      registrations = {};
-      message.textContent = "";
-    });
+        const messageBox = document.getElementById('message-box');
+        const messageContent = document.getElementById('message-content');
+        const closeMessageButton = document.getElementById('close-message');
+        const confirmYesButton = document.getElementById('confirm-yes');
+        const confirmNoButton = document.getElementById('confirm-no');
+        const backToStartFromFinalButton = document.getElementById('back-to-start-from-final'); // Neuer Button
 
-    // Registrierungskarten für jeden Tag bauen
-    function buildDaysUI() {
-      daysContainer.innerHTML = "";
-      activities.forEach(({ day, title, location, price }) => {
-        const div = document.createElement("div");
-        div.className = "day-card";
+        let timerInterval; // Variable für den Stoppuhr-Interval
+        let seconds = 0; // Zähler für die Sekunden
+        let gameEnded = false; // Flag, um den Spielstatus zu verfolgen
 
-        div.innerHTML = `
-          <h3>${day}</h3>
-          <p>${title}</p>
-          <p style="font-size:14px; color:#555;">${location}</p>
-          <p style="font-weight:bold; margin-top:10px;">Extrakosten (zusätzlich zur Anmeldegebühr im Tutti Kiesi): ${price}€</p>
-          <button id="btn-${day}">Verbindliche Anmeldung</button>
-        `;
+        // Admin-Anmeldeinformationen (HARTEKODIERTE FÜR DEMONSTRATIONSZWECKE)
+        const ADMIN_USERNAME = 'admin';
+        const ADMIN_PASSWORD = 'password123';
 
-        daysContainer.appendChild(div);
+        // Firebase-Variablen, die von der initialisierenden `script type="module"` bereitgestellt werden
+        let db;
+        let auth;
+        let currentUserId;
+        let appId; // Muss auch hier im Modul-Scope verfügbar sein
 
-        div.querySelector("button").addEventListener("click", () => registerForDay(day));
-      });
-    }
+        // Globale Firebase-Objekte nach Initialisierung übernehmen
+        window.addEventListener('DOMContentLoaded', () => {
+             // Warten, bis Firebase initialisiert und der Benutzer angemeldet ist
+            const checkFirebaseReady = setInterval(() => {
+                if (window.db && window.auth && window.currentUserId) {
+                    db = window.db;
+                    auth = window.auth;
+                    currentUserId = window.currentUserId;
+                    appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // App ID hier auch abrufen
 
-    // Anmeldung prüfen und speichern
-    async function registerForDay(day) {
-      message.textContent = "";
-      const vorname = vornameInput.value.trim();
-      const nachname = nachnameInput.value.trim();
-      const email = emailInput.value.trim();
-      const notfalltelefon = notfallInput.value.trim();
-      const consent = consentInput.checked;
+                    clearInterval(checkFirebaseReady); // Stop checking once ready
+                }
+            }, 100); // Check every 100ms
+        });
 
-      if (!vorname || !nachname || !email || !notfalltelefon) {
-        message.textContent = "Bitte alle Felder ausfüllen.";
-        return;
-      }
-      if (!consent) {
-        message.textContent = "Bitte Einverständnis zur Speicherung geben.";
-        return;
-      }
 
-      try {
-        // Prüfen Anzahl der Anmeldungen
-        const q = query(collection(db, "registrations"), where("day", "==", day));
-        const snapshot = await getDocs(q);
+        /**
+         * Wechselt die sichtbare Seite.
+         * @param {HTMLElement} pageToShow - Die Seite, die angezeigt werden soll.
+         */
+        function showPage(pageToShow) {
+            introPage.classList.add('hidden');
+            gamePage.classList.add('hidden');
+            adminLoginPage.classList.add('hidden');
+            adminDataPage.classList.add('hidden');
 
-        if (snapshot.size >= 8) {
-          message.textContent = `Für ${day} sind bereits 8 Anmeldungen vorhanden.`;
-          return;
+            // Entferne flex-col und items-center Klassen von allen, die sie haben könnten
+            introPage.classList.remove('flex', 'flex-col', 'items-center');
+            gamePage.classList.remove('flex', 'flex-col', 'items-center');
+            adminLoginPage.classList.remove('flex', 'flex-col', 'items-center');
+            adminDataPage.classList.remove('flex', 'flex-col', 'items-center');
+
+
+            pageToShow.classList.remove('hidden');
+            // Füge flex-col und items-center nur zu den Seiten hinzu, die sie brauchen
+            if (pageToShow === introPage || pageToShow === adminLoginPage || pageToShow === adminDataPage) {
+                pageToShow.classList.add('flex', 'flex-col', 'items-center');
+            }
+             if (pageToShow === gamePage) {
+                pageToShow.classList.add('flex', 'flex-col', 'items-center');
+            }
         }
 
-        // Prüfen ob Teilnehmer schon angemeldet ist
-        let schonAngemeldet = false;
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          if (data.vorname === vorname && data.nachname === nachname) {
-            schonAngemeldet = true;
-          }
-        });
-        if (schonAngemeldet) {
-          message.textContent = `Teilnehmer ist für ${day} bereits angemeldet.`;
-          return;
+        /**
+         * Formatiert die Sekunden in das MM:SS-Format.
+         * @param {number} totalSeconds - Die Gesamtzahl der Sekunden.
+         * @returns {string} Die formatierte Zeit.
+         */
+        function formatTime(totalSeconds) {
+            const minutes = Math.floor(totalSeconds / 60);
+            const remainingSeconds = totalSeconds % 60;
+            const formattedMinutes = String(minutes).padStart(2, '0');
+            const formattedSeconds = String(remainingSeconds).padStart(2, '0');
+            return `${formattedMinutes}:${formattedSeconds}`;
         }
 
-        // Speichern
-        await addDoc(collection(db, "registrations"), {
-          day,
-          vorname,
-          nachname,
-          email,
-          notfalltelefon,
-          consent,
-          timestamp: new Date().toISOString()
-        });
+        /**
+         * Startet die Stoppuhr.
+         */
+        function startStopwatch() {
+            if (!timerInterval) { // Verhindert mehrfaches Starten
+                timerInterval = setInterval(() => {
+                    seconds++;
+                    const formattedTime = formatTime(seconds);
+                    stopwatchDisplay.textContent = formattedTime;
+                    gameStopwatchDisplay.textContent = formattedTime; // Auch auf der Spielseite aktualisieren
+                }, 1000);
+            }
+        }
 
-        message.style.color = "green";
-        message.textContent = `Verbindliche Anmeldung für ${day} erfolgreich! Bitte Extrakosten im Tutti Kiesi abgeben.`;
-      } catch (err) {
-        message.style.color = "red";
-        message.textContent = "Fehler beim Speichern der Anmeldung.";
-      }
-    }
+        /**
+         * Stoppt die Stoppuhr.
+         */
+        function stopStopwatch() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
 
-    // Admin Listener für Live Daten
-    function startAdminListener() {
-      activities.forEach(({ day }) => {
-        const q = query(collection(db, "registrations"), where("day", "==", day));
-        onSnapshot(q, (snapshot) => {
-          registrations[day] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          renderAdminRegistrations();
-        });
-      });
-    }
+        /**
+         * Zeigt eine Meldung in der benutzerdefinierten Meldungsbox an.
+         * @param {string} message - Der anzuzeigende Text.
+         * @param {boolean} showConfirmButtons - Ob Ja/Nein-Buttons angezeigt werden sollen.
+         * @param {boolean} isHtmlContent - Ob der Nachrichtentext HTML enthält und als innerHTML gesetzt werden soll.
+         * @param {boolean} showBackToStartButton - Ob der "Zurück zur Startseite"-Button angezeigt werden soll.
+         * @returns {Promise<boolean>} Resolves mit true für Ja, false für Nein.
+         */
+        function showMessage(message, showConfirmButtons = false, isHtmlContent = false, showBackToStartButton = false) {
+            return new Promise(resolve => {
+                if (isHtmlContent) {
+                    messageContent.innerHTML = message; // Setzt HTML-Inhalt
+                } else {
+                    messageContent.textContent = message; // Setzt reinen Text
+                }
+                
+                messageBox.classList.add('show');
+                closeMessageButton.classList.toggle('hidden', showConfirmButtons || showBackToStartButton); // Schließen-Button ausblenden, wenn andere Buttons da sind
+                confirmYesButton.classList.toggle('hidden', !showConfirmButtons);
+                confirmNoButton.classList.toggle('hidden', !showConfirmButtons);
+                backToStartFromFinalButton.classList.toggle('hidden', !showBackToStartButton); // Neuen Button anzeigen/verbergen
 
-    // Admin Daten anzeigen
-    function renderAdminRegistrations() {
-      registrationsContainer.innerHTML = "";
-      activities.forEach(({ day }) => {
-        const div = document.createElement("div");
-        div.className = "admin-list";
-        div.innerHTML = `<strong>${day} (${(registrations[day]?.length || 0)} Anmeldungen)</strong>`;
+                // Event-Listener für die Buttons
+                const handleClose = () => {
+                    hideMessage();
+                    resolve(false); // Default: false, wenn einfach geschlossen
+                };
+                const handleYes = () => {
+                    hideMessage();
+                    resolve(true);
+                };
+                const handleNo = () => {
+                    hideMessage();
+                    resolve(false);
+                };
+                const handleBackToStart = () => {
+                    hideMessage();
+                    showPage(introPage); // Zurück zur Startseite
+                    // Reset game state for a fresh start if needed, e.g., seconds = 0; gameEnded = false;
+                    seconds = 0; // Reset seconds when returning to start page
+                    gameEnded = false; // Reset gameEnded flag
+                    // Also clear any game-specific data if a new game starts
+                    stationsData.forEach(station => {
+                        station.unlocked = false;
+                        station.selectedOption = null;
+                        station.submitted = false;
+                    });
+                    renderTable(); // Re-render table to reset state
+                    stopwatchDisplay.textContent = '00:00'; // Reset stopwatch on intro page
+                    gameStopwatchDisplay.textContent = '00:00'; // Reset stopwatch on game page
+                    localStorage.removeItem('stopwatchSeconds'); // Ensure local storage is cleared
+                    localStorage.removeItem('stopwatchStartTime'); // Ensure local storage is cleared
+                    startStopwatch(); // Start the stopwatch again for the intro page
+                    resolve(true); // Kann auch true sein, da es eine beabsichtigte Aktion ist
+                };
 
-        const ul = document.createElement("ul");
-        (registrations[day] || []).forEach(({ id, vorname, nachname, email, notfalltelefon, timestamp }) => {
-          const li = document.createElement("li");
-          li.textContent = `${vorname} ${nachname} | ${email} | Notfall: ${notfalltelefon} | ${new Date(timestamp).toLocaleString()}`;
-          ul.appendChild(li);
-        });
-        div.appendChild(ul);
-        registrationsContainer.appendChild(div);
-      });
-    }
+                // Entferne alte Listener, um doppelte Aufrufe zu vermeiden
+                closeMessageButton.removeEventListener('click', handleClose);
+                confirmYesButton.removeEventListener('click', handleYes);
+                confirmNoButton.removeEventListener('click', handleNo);
+                backToStartFromFinalButton.removeEventListener('click', handleBackToStart);
 
-    // CSV Download
-    btnDownload.addEventListener("click", () => {
-      let csv = "Tag,Vorname,Nachname,Email,Notfalltelefon,Timestamp\n";
-      activities.forEach(({ day }) => {
-        (registrations[day] || []).forEach(({ vorname, nachname, email, notfalltelefon, timestamp }) => {
-          csv += `${day},${vorname},${nachname},${email},${notfalltelefon},${timestamp}\n`;
-        });
-      });
+                // Füge neue Listener hinzu
+                closeMessageButton.addEventListener('click', handleClose);
+                confirmYesButton.addEventListener('click', handleYes);
+                confirmNoButton.addEventListener('click', handleNo);
+                backToStartFromFinalButton.addEventListener('click', handleBackToStart);
+            });
+        }
 
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "anmeldungen.csv";
-      a.click();
-      URL.revokeObjectURL(url);
-    });
+        /**
+         * Verbirgt die Meldungsbox.
+         */
+        function hideMessage() {
+            messageBox.classList.remove('show');
+        }
 
-    buildDaysUI();
-  </script>
-</body>
-</html>
+        /**
+         * Rendert die Spieltabelle basierend auf den aktuellen Daten in `stationsData`.
+         */
+        function renderTable() {
+            tableBody.innerHTML = ''; // Leert den aktuellen Tabelleninhalt
+
+            stationsData.forEach((station, index) => {
+                const row = document.createElement('tr'); // Erstellt eine neue Tabellenzeile
+
+                // Zelle für den Stationsnamen
+                const stationTd = document.createElement('td');
+                stationTd.className = 'px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900';
+                stationTd.textContent = station.station;
+                row.appendChild(stationTd);
+
+                // Zelle für den Code-Eingabebereich
+                const codeTd = document.createElement('td');
+                codeTd.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+
+                // Eingabefeld für den Code
+                const codeInput = document.createElement('input');
+                codeInput.type = 'text';
+                codeInput.placeholder = 'Code eingeben';
+                codeInput.className = 'border border-gray-300 rounded-md p-2 w-32 mr-2 focus:ring-blue-500 focus:border-blue-500';
+                codeInput.setAttribute('data-index', index);
+                codeInput.disabled = station.unlocked || station.submitted || gameEnded; // Deaktiviert, wenn entsperrt, abgegeben oder Spiel beendet
+                codeTd.appendChild(codeInput);
+
+                // Button zum Entsperren der Optionen
+                const unlockButton = document.createElement('button');
+                unlockButton.textContent = 'Entsperren';
+                unlockButton.className = 'px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50';
+                unlockButton.disabled = station.unlocked || station.submitted || gameEnded; // Deaktiviert, wenn entsperrt, abgegeben oder Spiel beendet
+                unlockButton.onclick = () => {
+                    if (gameEnded || station.submitted) return; // Nichts tun, wenn das Spiel beendet oder bereits abgegeben ist
+                    const enteredCode = codeInput.value.trim();
+                    if (enteredCode === station.code) {
+                        stationsData[index].unlocked = true;
+                        renderTable(); // Tabelle neu rendern, um Änderungen anzuzeigen
+                        showMessage(`Code für "${station.station}" korrekt! Auswahlfeld ist freigeschaltet.`);
+                    } else {
+                        showMessage('Falscher Code! Bitte versuchen Sie es erneut.');
+                        codeInput.value = '';
+                    }
+                };
+                codeTd.appendChild(unlockButton);
+                row.appendChild(codeTd);
+
+                // Zelle für das Dropdown-Feld "Auswahl"
+                const selectionTd = document.createElement('td');
+                selectionTd.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+
+                const selectElement = document.createElement('select');
+                selectElement.className = 'select-field';
+                selectElement.disabled = !station.unlocked || station.submitted || gameEnded; // Deaktiviert, wenn nicht freigeschaltet, eingereicht oder Spiel beendet
+
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = 'Bitte wählen...';
+                selectElement.appendChild(defaultOption);
+
+                const selectOptions = ['A', 'B', 'C', 'D', 'E'];
+                selectOptions.forEach(opt => {
+                    const option = document.createElement('option');
+                    option.value = opt;
+                    option.textContent = opt; // Zeigt nur den Buchstaben an
+                    selectElement.appendChild(option);
+                });
+
+                if (station.selectedOption) {
+                    selectElement.value = station.selectedOption;
+                }
+
+                selectElement.onchange = (event) => {
+                    if (gameEnded || station.submitted) return; // Nichts tun, wenn das Spiel beendet oder bereits abgegeben ist
+                    stationsData[index].selectedOption = event.target.value;
+                };
+
+                selectionTd.appendChild(selectElement);
+                row.appendChild(selectionTd);
+
+                // Zelle für den "Abgeben"-Button
+                const actionTd = document.createElement('td');
+                actionTd.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+
+                const submitButton = document.createElement('button');
+                submitButton.textContent = station.submitted ? 'Abgegeben' : 'Abgeben'; // Text ändern, wenn abgegeben
+                submitButton.className = `px-3 py-2 text-white rounded-md transition duration-200 focus:outline-none focus:ring-2 focus:ring-opacity-50 ${
+                    station.submitted ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-500 hover:bg-purple-600 focus:ring-purple-500'
+                }`;
+                // Button deaktiviert, wenn nicht freigeschaltet, bereits abgegeben oder Spiel beendet
+                submitButton.disabled = !station.unlocked || station.submitted || gameEnded;
+                submitButton.onclick = async () => {
+                    if (gameEnded || station.submitted) return; // Nichts tun, wenn das Spiel beendet oder bereits abgegeben ist
+                    if (!db || !currentUserId) {
+                        showMessage('Datenbank oder Benutzer nicht verfügbar. Bitte warten Sie, bis Firebase initialisiert ist.');
+                        return;
+                    }
+
+                    if (station.selectedOption) {
+                        const confirm = await showMessage(`Möchten Sie Option "${station.selectedOption}" für "${station.station}" wirklich abgeben?`, true);
+                        if (confirm) {
+                            try {
+                                const submissionsRef = collection(db, `/artifacts/${appId}/public/data/submissions`);
+                                await addDoc(submissionsRef, {
+                                    userId: currentUserId,
+                                    station: station.station,
+                                    selectedOption: station.selectedOption,
+                                    timestamp: serverTimestamp() // Firestore-Timestamp hinzufügen
+                                });
+                                stationsData[index].submitted = true; // Markiere als lokal abgegeben
+                                renderTable(); // Tabelle neu rendern, um Statusänderung anzuzeigen
+                                showMessage(`Option "${station.selectedOption}" für "${station.station}" erfolgreich abgegeben und gespeichert!`);
+                            } catch (e) {
+                                console.error("Fehler beim Speichern der Abgabe:", e);
+                                showMessage('Fehler beim Speichern der Abgabe. Bitte versuchen Sie es erneut.');
+                            }
+                        }
+                    } else {
+                        showMessage('Bitte wählen Sie eine Option, bevor Sie abgeben.');
+                    }
+                };
+                actionTd.appendChild(submitButton);
+                row.appendChild(actionTd);
+
+                tableBody.appendChild(row);
+            });
+        }
+
+        /**
+         * Rendert die Admin-Datentabelle basierend auf den abgerufenen Firestore-Daten.
+         * @param {Array<Object>} submissions - Eine Liste der abgegebenen Daten von Firestore.
+         */
+        function renderAdminTable(submissions) {
+            adminDataTableBody.innerHTML = ''; // Leert den aktuellen Tabelleninhalt
+
+            if (submissions.length === 0) {
+                const noDataRow = document.createElement('tr');
+                noDataRow.innerHTML = `<td colspan="4" class="px-6 py-4 text-center text-gray-500">
+                    Noch keine Abgaben vorhanden.
+                </td>`;
+                adminDataTableBody.appendChild(noDataRow);
+                return;
+            }
+
+            submissions.forEach(submission => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 break-all">${submission.userId || 'Unbekannt'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${submission.station}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${submission.selectedOption}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${submission.timestamp ? new Date(submission.timestamp.seconds * 1000).toLocaleString() : 'N/A'}</td>
+                `;
+                adminDataTableBody.appendChild(row);
+            });
+        }
+
+        /**
+         * Beendet das Spiel und zeigt eine Zusammenfassung an.
+         */
+        async function endGame() {
+            if (gameEnded) return; // Verhindert mehrfaches Beenden
+
+            const confirmEnd = await showMessage('Möchten Sie das Spiel wirklich beenden?', true);
+
+            if (confirmEnd) {
+                gameEnded = true;
+                stopStopwatch(); // Stoppuhr anhalten
+                localStorage.removeItem('stopwatchSeconds'); // Stoppuhr-Zeit aus Local Storage entfernen
+                localStorage.removeItem('stopwatchStartTime'); // Startzeit entfernen
+
+                let submittedCount = 0;
+                stationsData.forEach(station => {
+                    if (station.submitted) {
+                        submittedCount++;
+                    }
+                });
+
+                // Aktualisierte und formatierte Dankesnachricht
+                const finalMessage = `
+                    <p class="text-xl font-bold mb-4">Vielen Dank für Ihre Teilnahme!</p>
+                    <p class="text-base mb-2">Sie haben ${submittedCo
