@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Anmeldung Ausflugswoche</title>
+  <style>
+    body { max-width: 700px; margin: auto; font-family: Arial, sans-serif; padding: 20px; }
+    h1 { cursor: pointer; color: #333; }
+    .day-card { border: 1px solid #ccc; border-radius: 6px; padding: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    button { padding: 8px 16px; font-size: 16px; cursor: pointer; }
+    input, label { font-size: 16px; margin-bottom: 10px; display: block; width: 100%; }
+    label > input { display: inline-block; width: auto; margin-right: 8px; }
+    .admin-list { background: #eee; padding: 10px; border-radius: 6px; margin-bottom: 20px; }
+    ul { padding-left: 20px; }
+    .error { color: red; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1 id="title" title="Klick hier (geheim!)">Anmeldung Ausflugswoche</h1>
+
+  <div id="admin-login" style="display:none; margin-bottom:20px;">
+    <input type="password" id="admin-pass" placeholder="Admin Passwort" />
+    <button id="btn-admin-login">Einloggen</button>
+    <p id="admin-login-msg" class="error"></p>
+  </div>
+
+  <div id="admin-area" style="display:none;">
+    <h2>Admin-Bereich</h2>
+    <div id="registrations-container"></div>
+    <button id="btn-download">Daten herunterladen</button>
+    <button id="btn-logout" style="margin-left: 10px;">Logout</button>
+  </div>
+
+  <div id="registration-form">
+    <input type="text" id="vorname" placeholder="Vorname des Teilnehmers" />
+    <input type="text" id="nachname" placeholder="Nachname des Teilnehmers" />
+    <input type="email" id="email" placeholder="E-Mail" />
+    <input type="tel" id="notfalltelefon" placeholder="Notfalltelefon" />
+    <label><input type="checkbox" id="consent" /> Ich bin einverstanden, dass meine Daten in Firebase gespeichert werden.</label>
+  </div>
+
+  <div id="days-container"></div>
+
+  <p id="message" class="error"></p>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      query,
+      where,
+      getDocs,
+      onSnapshot
+    } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+
+    // Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyCTJpnromzdpR1BIhfAV7kFaqDnoUokwhA",
+      authDomain: "ausflugswocheanmeldung.firebaseapp.com",
+      projectId: "ausflugswocheanmeldung",
+      storageBucket: "ausflugswocheanmeldung.firebasestorage.app",
+      messagingSenderId: "88455659109",
+      appId: "1:88455659109:web:a5a6220b659abb8e93d08c",
+      measurementId: "G-NCJC8XBSY6"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const activities = [
+      { day: "Montag", title: "Tiere im Wald", location: "Wildgehege Bad Säckingen", price: 5 },
+      { day: "Dienstag", title: "Feuer machen im Wald", location: "Grillplatz Herten", price: 5 },
+      { day: "Mittwoch", title: "Fernsehturm? Was ist das?", location: "St. Chrischona Fernsehturm", price: 5 },
+      { day: "Donnerstag", title: "Tierpark", location: "Lange Erlen", price: 5 },
+      { day: "Freitag", title: "Was lebt, aber wir nicht sehen", location: "Tschamberhöhle Rheinfelden", price: 10 },
+    ];
+
+    const title = document.getElementById("title");
+    const adminLoginDiv = document.getElementById("admin-login");
+    const adminPassInput = document.getElementById("admin-pass");
+    const adminLoginMsg = document.getElementById("admin-login-msg");
+    const btnAdminLogin = document.getElementById("btn-admin-login");
+    const adminArea = document.getElementById("admin-area");
+    const registrationsContainer = document.getElementById("registrations-container");
+    const btnDownload = document.getElementById("btn-download");
+    const btnLogout = document.getElementById("btn-logout");
+
+    const vornameInput = document.getElementById("vorname");
+    const nachnameInput = document.getElementById("nachname");
+    const emailInput = document.getElementById("email");
+    const notfallInput = document.getElementById("notfalltelefon");
+    const consentInput = document.getElementById("consent");
+
+    const daysContainer = document.getElementById("days-container");
+    const message = document.getElementById("message");
+
+    let adminMode = false;
+    let registrations = {};
+
+    // Titel Klick: Admin Login einblenden
+    title.addEventListener("click", () => {
+      if (!adminMode) {
+        adminLoginDiv.style.display = "block";
+        adminPassInput.focus();
+        message.textContent = "";
+      }
+    });
+
+    // Admin Login Button
+    btnAdminLogin.addEventListener("click", () => {
+      const pw = adminPassInput.value.trim();
+      if (pw === "geheim123") {
+        adminMode = true;
+        adminLoginDiv.style.display = "none";
+        adminArea.style.display = "block";
+        adminPassInput.value = "";
+        adminLoginMsg.textContent = "";
+        message.textContent = "";
+        startAdminListener();
+      } else {
+        adminLoginMsg.textContent = "Falsches Passwort!";
+      }
+    });
+
+    // Admin Logout
+    btnLogout.addEventListener("click", () => {
+      adminMode = false;
+      adminArea.style.display = "none";
+      registrationsContainer.innerHTML = "";
+      registrations = {};
+      message.textContent = "";
+    });
+
+    // Registrierungskarten für jeden Tag bauen
+    function buildDaysUI() {
+      daysContainer.innerHTML = "";
+      activities.forEach(({ day, title, location, price }) => {
+        const div = document.createElement("div");
+        div.className = "day-card";
+
+        div.innerHTML = `
+          <h3>${day}</h3>
+          <p>${title}</p>
+          <p style="font-size:14px; color:#555;">${location}</p>
+          <p style="font-weight:bold; margin-top:10px;">Extrakosten (zusätzlich zur Anmeldegebühr im Tutti Kiesi): ${price}€</p>
+          <button id="btn-${day}">Verbindliche Anmeldung</button>
+        `;
+
+        daysContainer.appendChild(div);
+
+        div.querySelector("button").addEventListener("click", () => registerForDay(day));
+      });
+    }
+
+    // Anmeldung prüfen und speichern
+    async function registerForDay(day) {
+      message.textContent = "";
+      const vorname = vornameInput.value.trim();
+      const nachname = nachnameInput.value.trim();
+      const email = emailInput.value.trim();
+      const notfalltelefon = notfallInput.value.trim();
+      const consent = consentInput.checked;
+
+      if (!vorname || !nachname || !email || !notfalltelefon) {
+        message.textContent = "Bitte alle Felder ausfüllen.";
+        return;
+      }
+      if (!consent) {
+        message.textContent = "Bitte Einverständnis zur Speicherung geben.";
+        return;
+      }
+
+      try {
+        // Prüfen Anzahl der Anmeldungen
+        const q = query(collection(db, "registrations"), where("day", "==", day));
+        const snapshot = await getDocs(q);
+
+        if (snapshot.size >= 8) {
+          message.textContent = `Für ${day} sind bereits 8 Anmeldungen vorhanden.`;
+          return;
+        }
+
+        // Prüfen ob Teilnehmer schon angemeldet ist
+        let schonAngemeldet = false;
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          if (data.vorname === vorname && data.nachname === nachname) {
+            schonAngemeldet = true;
+          }
+        });
+        if (schonAngemeldet) {
+          message.textContent = `Teilnehmer ist für ${day} bereits angemeldet.`;
+          return;
+        }
+
+        // Speichern
+        await addDoc(collection(db, "registrations"), {
+          day,
+          vorname,
+          nachname,
+          email,
+          notfalltelefon,
+          consent,
+          timestamp: new Date().toISOString()
+        });
+
+        message.style.color = "green";
+        message.textContent = `Verbindliche Anmeldung für ${day} erfolgreich! Bitte Extrakosten im Tutti Kiesi abgeben.`;
+      } catch (err) {
+        message.style.color = "red";
+        message.textContent = "Fehler beim Speichern der Anmeldung.";
+      }
+    }
+
+    // Admin Listener für Live Daten
+    function startAdminListener() {
+      activities.forEach(({ day }) => {
+        const q = query(collection(db, "registrations"), where("day", "==", day));
+        onSnapshot(q, (snapshot) => {
+          registrations[day] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          renderAdminRegistrations();
+        });
+      });
+    }
+
+    // Admin Daten anzeigen
+    function renderAdminRegistrations() {
+      registrationsContainer.innerHTML = "";
+      activities.forEach(({ day }) => {
+        const div = document.createElement("div");
+        div.className = "admin-list";
+        div.innerHTML = `<strong>${day} (${(registrations[day]?.length || 0)} Anmeldungen)</strong>`;
+
+        const ul = document.createElement("ul");
+        (registrations[day] || []).forEach(({ id, vorname, nachname, email, notfalltelefon, timestamp }) => {
+          const li = document.createElement("li");
+          li.textContent = `${vorname} ${nachname} | ${email} | Notfall: ${notfalltelefon} | ${new Date(timestamp).toLocaleString()}`;
+          ul.appendChild(li);
+        });
+        div.appendChild(ul);
+        registrationsContainer.appendChild(div);
+      });
+    }
+
+    // CSV Download
+    btnDownload.addEventListener("click", () => {
+      let csv = "Tag,Vorname,Nachname,Email,Notfalltelefon,Timestamp\n";
+      activities.forEach(({ day }) => {
+        (registrations[day] || []).forEach(({ vorname, nachname, email, notfalltelefon, timestamp }) => {
+          csv += `${day},${vorname},${nachname},${email},${notfalltelefon},${timestamp}\n`;
+        });
+      });
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "anmeldungen.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    buildDaysUI();
+  </script>
+</body>
+</html>
