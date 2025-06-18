@@ -3,842 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tierstationen-Spiel</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Entdeckerwege – Ein Abenteuer für die ganze Familie!</title>
     <style>
         body {
-            font-family: 'Inter', sans-serif; /* Standard-Schriftart */
-            background-color: #f0f4f8; /* Heller Hintergrund */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh; /* Mindesthöhe des Viewports */
-            padding: 20px;
-            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333;
         }
-        table {
-            border-collapse: separate; /* Für abgerundete Ecken */
-            border-spacing: 0; /* Entfernt den Standard-Zellenabstand */
-        }
-        th, td {
-            padding: 12px 15px; /* Innenabstand für Zellen */
-            text-align: left; /* Textausrichtung */
-        }
-        th {
-            background-color: #4a5568; /* Dunklerer Header-Hintergrund */
-            color: #ffffff; /* Weiße Schrift im Header */
-            font-weight: bold; /* Fette Schrift */
-        }
-        tr:nth-child(even) {
-            background-color: #edf2f7; /* Zebrastreifen-Effekt */
-        }
-        tr:nth-child(odd) {
-            background-color: #ffffff; /* Weiße Zeilen */
-        }
-        /* Abgerundete Ecken für die erste und letzte Header-Zelle */
-        th:first-child {
-            border-top-left-radius: 8px;
-        }
-        th:last-child {
-            border-top-right-radius: 8px;
-        }
-        /* Abgerundete Ecken für die erste und letzte Zelle der letzten Zeile */
-        tr:last-child td:first-child {
-            border-bottom-left-radius: 8px;
-        }
-        tr:last-child td:last-child {
-            border-bottom-right-radius: 8px;
-        }
-
-        /* Stil für die Meldungsbox */
-        .message-box {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: white;
-            border: 1px solid #cbd5e0;
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: #fff;
+            padding: 30px;
             border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            z-index: 1000;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #2c3e50;
             text-align: center;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
-            max-width: 90%;
+            margin-bottom: 30px;
         }
-
-        .message-box.show {
-            opacity: 1;
-            visibility: visible;
+        p {
+            margin-bottom: 15px;
         }
-        /* Verbesserte Formatierung für den Inhalt der Meldungsbox */
-        #message-content {
-            white-space: pre-line; /* Behält Zeilenumbrüche bei */
+        strong {
+            color: #e67e22; /* Eine auffällige Farbe für wichtige Wörter */
+        }
+        .highlight {
+            background-color: #ffeaa7; /* Eine dezente Hintergrundfarbe für Hervorhebungen */
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        .cta-button {
+            display: block;
+            width: fit-content;
+            margin: 20px auto;
+            padding: 12px 25px;
+            background-color: #3498db;
+            color: white;
             text-align: center;
-            padding: 10px 0;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 1.1em;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
         }
-
-        /* Stil für das Dropdown-Feld */
-        .select-field {
-            border: 1px solid #cbd5e0;
-            border-radius: 6px;
-            padding: 8px 12px;
-            background-color: #ffffff;
-            font-size: 0.875rem; /* text-sm */
-            line-height: 1.25rem; /* leading-5 */
-            color: #4a5568; /* text-gray-700 */
-            width: 100%;
-            max-width: 150px;
-            transition: all 0.2s ease-in-out;
+        .cta-button:hover {
+            background-color: #2980b9;
         }
-        .select-field:focus {
-            outline: none;
-            border-color: #3b82f6; /* blue-500 */
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); /* ring-blue-500 */
-        }
-        .select-field:disabled {
-            background-color: #e2e8f0; /* gray-200 */
-            cursor: not-allowed;
-            color: #718096; /* gray-500 */
-        }
-
-        /* Stil für Hauptseiten-Container */
-        .page-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            width: 100%;
-            max-width: 4xl;
+        .important-date {
+            font-weight: bold;
+            color: #c0392b; /* Eine kräftige Farbe für das Datum */
         }
     </style>
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Global zugänglich machen
-        window.firebaseApp = null;
-        window.db = null;
-        window.auth = null;
-        window.currentUserId = null;
-
-        // Sicherstellen, dass __app_id und __firebase_config definiert sind
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-
-        try {
-            window.firebaseApp = initializeApp(firebaseConfig);
-            window.db = getFirestore(window.firebaseApp);
-            window.auth = getAuth(window.firebaseApp);
-
-            // Anonyme Anmeldung oder mit Custom Token
-            onAuthStateChanged(window.auth, async (user) => {
-                if (user) {
-                    window.currentUserId = user.uid;
-                    console.log('Firebase: User signed in with UID:', window.currentUserId);
-                } else {
-                    console.log('Firebase: No user signed in. Attempting anonymous sign-in...');
-                    try {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(window.auth, __initial_auth_token);
-                            console.log('Firebase: Signed in with custom token.');
-                        } else {
-                            await signInAnonymously(window.auth);
-                            console.log('Firebase: Signed in anonymously.');
-                        }
-                    } catch (error) {
-                        console.error('Firebase Auth Error:', error);
-                    }
-                }
-            });
-        } catch (e) {
-            console.error("Firebase Initialization Error:", e);
-        }
-    </script>
 </head>
-<body class="antialiased">
-    <!-- Hauptcontainer für alle Seiten -->
-    <div class="page-container">
-        <!-- Startseite -->
-        <div id="intro-page" class="bg-white shadow-lg rounded-lg p-8 w-full max-w-lg text-center flex flex-col items-center justify-center">
-            <h1 class="text-4xl font-extrabold text-gray-800 mb-6 tracking-tight">
-                Willkommen zur Tierstationen-App!
-            </h1>
-            <p class="text-lg text-gray-600 mb-8">
-                Gib den richtigen Code für jede Tierstation ein, um die Auswahloptionen freizuschalten.
-                <span id="open-admin-trigger">Wähle</span> dann die passende Option aus und bestätige deine Eingabe. Die Zeit läuft!
-            </p>
-            <div class="text-5xl font-bold text-blue-600 mb-8">
-                <span id="stopwatch">00:00</span>
-            </div>
-            <div class="flex flex-col space-y-4">
-                <button id="start-game-button" class="px-8 py-4 bg-green-600 text-white text-xl font-semibold rounded-lg hover:bg-green-700 transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 shadow-lg">
-                    Spiel starten
-                </button>
-            </div>
-        </div>
+<body>
 
-        <!-- Admin Login Seite (anfangs versteckt) -->
-        <div id="admin-login-page" class="hidden bg-white shadow-lg rounded-lg p-8 w-full max-w-lg text-center flex flex-col items-center justify-center">
-            <h2 class="text-3xl font-extrabold text-gray-800 mb-6 tracking-tight">
-                Admin Login
-            </h2>
-            <input type="text" id="admin-username" placeholder="Benutzername" class="w-full p-3 mb-4 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-            <input type="password" id="admin-password" placeholder="Passwort" class="w-full p-3 mb-6 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-            <button id="login-button" class="px-8 py-4 bg-indigo-600 text-white text-xl font-semibold rounded-lg hover:bg-indigo-700 transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50 shadow-lg mb-4">
-                Login
-            </button>
-            <button id="back-to-intro-from-admin-login" class="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition duration-200">
-                Zurück
-            </button>
-        </div>
+    <div class="container">
+        <h1>Die Entdeckerwege – Dein Abenteuer beginnt hier!</h1>
 
-        <!-- Admin Data Seite (anfangs versteckt) -->
-        <div id="admin-data-page" class="hidden bg-white shadow-lg rounded-lg p-4 w-full max-w-4xl">
-            <h2 class="text-3xl font-extrabold text-center text-gray-800 mb-8 tracking-tight">
-                Abgegebene Stationen (Admin)
-            </h2>
-            <div class="overflow-x-auto rounded-lg border border-gray-200 mb-6">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-700">
-                        <tr>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider rounded-tl-lg">
-                                Benutzer ID
-                            </th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                Station
-                            </th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                Ausgewählte Option
-                            </th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider rounded-tr-lg">
-                                Abgabezeit
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody id="admin-data-table-body" class="bg-white divide-y divide-gray-200">
-                        <!-- Admin-Daten werden dynamisch mit JavaScript gefüllt -->
-                        <tr>
-                            <td colspan="4" class="px-6 py-4 text-center text-gray-500">
-                                Lade Daten...
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <button id="back-to-intro-from-admin-data" class="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition duration-200">
-                Zurück zur Startseite
-            </button>
-        </div>
+        <p>
+            Die <strong>Entdeckerwege</strong> sind ein spannender Rundweg, der euch einlädt, Neues
+            zu lernen und die Natur zu erleben! Sie führen dich durch Felder und Straßen
+            und haben viele aufregende Stationen. Ihr könnt theoretisch an jeder Station
+            anfangen zu rätseln, forschen und mehr über Tiere, Pflanzen oder spannende
+            Geschichten erfahren.
+        </p>
 
-        <!-- Spielseite (anfangs versteckt) -->
-        <div id="game-page" class="hidden bg-white shadow-lg rounded-lg p-4 w-full max-w-4xl">
-            <h1 class="text-3xl font-extrabold text-center text-gray-800 mb-8 tracking-tight">
-                Tierstationen Übersicht
-            </h1>
+        <p>
+            Versucht das **Lösungswort** herauszufinden und stoppt eure Zeit, wie lange ihr
+            braucht, um den Weg abzugehen und alle Rätsel zu lösen.
+            Holt euch ein <strong>Rätselblatt</strong> vor dem <span class="highlight">Tutti Kiesi</span> ab oder
+            <a href="#" class="cta-button" aria-label="Rätselblatt herunterladen">ladet es euch hier herunter und druckt es aus</a>.
+            (Hinweis: Ersetze das "#" im Link oben noch durch den tatsächlichen Download-Link für dein Rätselblatt!)
+        </p>
 
-            <div class="flex justify-end mb-4 text-2xl font-bold text-blue-600">
-                Zeit: <span id="game-stopwatch">00:00</span>
-            </div>
+        <p>
+            Ihr könnt das ausgefüllte Blatt dann, um an der Siegerehrung teilzunehmen,
+            wieder in den Briefkasten am <span class="highlight">Spiel- und Kulturhaus Tutti Kiesi</span>
+            einwerfen.
+        </p>
 
+        <p>
+            Eine kleine <strong class="important-date">Siegerehrung</strong> findet dann am
+            <span class="important-date">Sonntag, den 28. September 2025</span>
+            im <span class="highlight">Tutti Kiesi</span> im Rahmen des **offenen Spiel- und Familientags**
+            statt.
+        </p>
 
-            <div class="overflow-x-auto rounded-lg border border-gray-200 mb-6">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-700">
-                        <tr>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider rounded-tl-lg">
-                                Station
-                            </th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                Code
-                            </th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                Auswahl
-                            </th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider rounded-tr-lg">
-                                Aktion
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody id="table-body" class="bg-white divide-y divide-gray-200">
-                        <!-- Tabelle wird dynamisch mit JavaScript gefüllt -->
-                    </tbody>
-                </table>
-            </div>
+        <p>
+            <strong>Mach dich bereit für ein echtes Abenteuer!</strong>
+        </p>
 
-            <div class="flex justify-center mt-6">
-                <button id="end-game-button" class="px-6 py-3 bg-red-600 text-white text-lg font-semibold rounded-lg hover:bg-red-700 transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-500 focus:ring-opacity-50 shadow-lg">
-                    Spiel beenden
-                </button>
-            </div>
-            <!-- Neuer Bereich für die Zeit-Zusammenfassung -->
-            <div id="game-summary" class="hidden text-lg text-gray-700 mt-4 text-center p-4 bg-gray-100 rounded-lg shadow-inner w-full max-w-sm mx-auto">
-                <p class="font-bold text-gray-800 mb-2">Ihre Spielzeiten:</p>
-                <p>Messung gestartet: <span id="summary-start-time" class="font-semibold text-blue-700">N/A</span></p>
-                <p>Messung beendet: <span id="summary-end-time" class="font-semibold text-blue-700">N/A</span></p>
-                <p>Gesamtdauer: <span id="summary-duration" class="font-bold text-green-700 text-xl">N/A</span></p>
-            </div>
-        </div>
     </div>
 
-    <!-- Meldungsbox -->
-    <div id="message-box" class="message-box">
-        <p id="message-content" class="text-lg font-semibold text-gray-800 mb-4"></p>
-        <div class="flex justify-center space-x-4 mt-4">
-            <button id="confirm-yes" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-200 hidden">Ja</button>
-            <button id="confirm-no" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition duration-200 hidden">Nein</button>
-            <button id="close-message" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200 hidden">Schließen</button>
-            <!-- Neuer Button für die finale Nachricht -->
-            <button id="back-to-start-from-final" class="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition duration-200 hidden">Zurück zur Startseite</button>
-        </div>
-    </div>
-
-    <script type="module">
-        // Importe für Firestore (müssen im Type-Module-Script sein)
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Daten für die Tierstationen
-        const stationsData = [
-            { station: 'Löwe', code: 'L-001', options: { a: '25', b: 'Ja', c: 'Rot', d: '1.8m', e: 'Aktiv' }, unlocked: false, selectedOption: null, submitted: false },
-            { station: 'Tiger', code: 'T-002', options: { a: '18', b: 'Nein', c: 'Gelb', d: '2.2m', e: 'Schlafend' }, unlocked: false, selectedOption: null, submitted: false },
-            { station: 'Elefant', code: 'E-003', options: { a: '40', b: 'Ja', c: 'Grau', d: '3.5m', e: 'Fressend' }, unlocked: false, selectedOption: null, submitted: false },
-            { station: 'Giraffe', code: 'G-004', options: { a: '12', b: 'Ja', c: 'Braun', d: '5.0m', e: 'Stehend' }, unlocked: false, selectedOption: null, submitted: false },
-            { station: 'Pinguin', code: 'P-005', options: { a: '5', b: 'Nein', c: 'Schwarz-Weiß', d: '0.7m', e: 'Schwimmend' }, unlocked: false, selectedOption: null, submitted: false },
-            { station: 'Zebra', code: 'Z-006', options: { a: '10', b: 'Ja', c: 'Schwarz-Weiß', d: '1.6m', e: 'Grasend' }, unlocked: false, selectedOption: null, submitted: false }
-        ];
-
-        // Referenzen auf DOM-Elemente
-        const introPage = document.getElementById('intro-page');
-        const gamePage = document.getElementById('game-page');
-        const adminLoginPage = document.getElementById('admin-login-page');
-        const adminDataPage = document.getElementById('admin-data-page');
-
-        const startGameButton = document.getElementById('start-game-button');
-        const openAdminTrigger = document.getElementById('open-admin-trigger'); // Trigger für Admin-Login
-        
-        const backToIntroFromAdminLoginButton = document.getElementById('back-to-intro-from-admin-login');
-        const backToIntroFromAdminDataButton = document.getElementById('back-to-intro-from-admin-data');
-
-        const adminUsernameInput = document.getElementById('admin-username');
-        const adminPasswordInput = document.getElementById('admin-password');
-        const loginButton = document.getElementById('login-button');
-        const adminDataTableBody = document.getElementById('admin-data-table-body');
-
-
-        const tableBody = document.getElementById('table-body');
-        const endGameButton = document.getElementById('end-game-button');
-        const stopwatchDisplay = document.getElementById('stopwatch');
-        const gameStopwatchDisplay = document.getElementById('game-stopwatch');
-        const gameSummaryDiv = document.getElementById('game-summary'); // Neuer Referenz
-        const summaryStartTimeSpan = document.getElementById('summary-start-time');
-        const summaryEndTimeSpan = document.getElementById('summary-end-time');
-        const summaryDurationSpan = document.getElementById('summary-duration');
-
-
-        const messageBox = document.getElementById('message-box');
-        const messageContent = document.getElementById('message-content');
-        const closeMessageButton = document.getElementById('close-message');
-        const confirmYesButton = document.getElementById('confirm-yes');
-        const confirmNoButton = document.getElementById('confirm-no');
-        const backToStartFromFinalButton = document.getElementById('back-to-start-from-final'); // Neuer Button
-
-        let stopwatchIntervalId = null; // Variable für den Stoppuhr-Interval
-        let stopwatchStartTime = 0; // Der Startzeitpunkt der Messung (Timestamp des ersten Code-Eingabe)
-        let stopwatchEndTime = 0; // Der Endzeitpunkt der Messung (Timestamp des "Spiel beenden" Klicks)
-        let gameSessionActive = false; // Flag: true, wenn eine Spielsitzung aktiv ist
-
-        // Admin-Anmeldeinformationen (HARTEKODIERTE FÜR DEMONSTRATIONSZWECKE)
-        const ADMIN_USERNAME = 'admin';
-        const ADMIN_PASSWORD = 'password123';
-
-        // Firebase-Variablen, die von der initialisierenden `script type="module"` bereitgestellt werden
-        // Diese werden direkt über `window.db`, `window.auth`, `window.currentUserId` referenziert
-        // anstatt lokale Variablen zu verwenden, um Timing-Probleme zu vermeiden.
-        // let db; // Entfernt
-        // let auth; // Entfernt
-        // let currentUserId; // Entfernt
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // Dies ist eine Konstante und ist sofort verfügbar.
-
-        // Globale Firebase-Objekte nach Initialisierung übernehmen
-        window.addEventListener('DOMContentLoaded', () => {
-             // Warten, bis Firebase initialisiert und der Benutzer angemeldet ist
-            const checkFirebaseReady = setInterval(() => {
-                if (window.db && window.auth && window.currentUserId) {
-                    // Keine Zuweisungen zu lokalen Variablen hier nötig,
-                    // da direkt window.db, window.auth, window.currentUserId verwendet werden.
-                    clearInterval(checkFirebaseReady); // Stop checking once ready
-                }
-            }, 100); // Check every 100ms
-        });
-
-
-        /**
-         * Wechselt die sichtbare Seite.
-         * @param {HTMLElement} pageToShow - Die Seite, die angezeigt werden soll.
-         */
-        function showPage(pageToShow) {
-            introPage.classList.add('hidden');
-            gamePage.classList.add('hidden');
-            adminLoginPage.classList.add('hidden');
-            adminDataPage.classList.add('hidden');
-
-            // Entferne flex-col und items-center Klassen von allen, die sie haben könnten
-            introPage.classList.remove('flex', 'flex-col', 'items-center');
-            gamePage.classList.remove('flex', 'flex-col', 'items-center');
-            adminLoginPage.classList.remove('flex', 'flex-col', 'items-center');
-            adminDataPage.classList.remove('flex', 'flex-col', 'items-center');
-
-
-            pageToShow.classList.remove('hidden');
-            // Füge flex-col und items-center nur zu den Seiten hinzu, die sie brauchen
-            if (pageToShow === introPage || pageToShow === adminLoginPage || pageToShow === adminDataPage) {
-                pageToShow.classList.add('flex', 'flex-col', 'items-center');
-            }
-             if (pageToShow === gamePage) {
-                pageToShow.classList.add('flex', 'flex-col', 'items-center');
-            }
-        }
-
-        /**
-         * Formatiert die Sekunden in das MM:SS-Format.
-         * @param {number} totalSeconds - Die Gesamtzahl der Sekunden.
-         * @returns {string} Die formatierte Zeit.
-         */
-        function formatTime(totalSeconds) {
-            const minutes = Math.floor(totalSeconds / 60);
-            const remainingSeconds = totalSeconds % 60;
-            const formattedMinutes = String(minutes).padStart(2, '0');
-            const formattedSeconds = String(remainingSeconds).padStart(2, '0');
-            return `${formattedMinutes}:${formattedSeconds}`;
-        }
-
-        /**
-         * Aktualisiert die Stoppuhr-Anzeige basierend auf dem Startzeitpunkt.
-         * Diese Funktion wird im Intervall aufgerufen und direkt bei Seitenlast, wenn ein Spiel aktiv war.
-         */
-        function updateStopwatchDisplay() {
-            if (stopwatchStartTime === 0 || !gameSessionActive) { // Wenn die Uhr nicht läuft oder keine aktive Session
-                stopwatchDisplay.textContent = '00:00';
-                gameStopwatchDisplay.textContent = '00:00';
-                return;
-            }
-            const now = Date.now();
-            const elapsedSeconds = Math.floor((now - stopwatchStartTime) / 1000);
-            const formattedTime = formatTime(elapsedSeconds);
-            stopwatchDisplay.textContent = formattedTime;
-            gameStopwatchDisplay.textContent = formattedTime;
-        }
-
-        /**
-         * Startet die Stoppuhr (das Intervall, das die Anzeige aktualisiert).
-         */
-        function startStopwatch() {
-            if (stopwatchIntervalId === null && gameSessionActive) { // Verhindert mehrfaches Starten
-                stopwatchIntervalId = setInterval(updateStopwatchDisplay, 1000);
-            }
-        }
-
-        /**
-         * Stoppt die Stoppuhr (löscht das Intervall).
-         */
-        function stopStopwatch() {
-            clearInterval(stopwatchIntervalId);
-            stopwatchIntervalId = null;
-        }
-
-        /**
-         * Zeigt eine Meldung in der benutzerdefinierten Meldungsbox an.
-         * @param {string} message - Der anzuzeigende Text.
-         * @param {boolean} showConfirmButtons - Ob Ja/Nein-Buttons angezeigt werden sollen.
-         * @param {boolean} isHtmlContent - Ob der Nachrichtentext HTML enthält und als innerHTML gesetzt werden soll.
-         * @param {boolean} showBackToStartButton - Ob der "Zurück zur Startseite"-Button angezeigt werden soll.
-         * @returns {Promise<boolean>} Resolves mit true für Ja, false für Nein.
-         */
-        function showMessage(message, showConfirmButtons = false, isHtmlContent = false, showBackToStartButton = false) {
-            return new Promise(resolve => {
-                if (isHtmlContent) {
-                    messageContent.innerHTML = message; // Setzt HTML-Inhalt
-                } else {
-                    messageContent.textContent = message; // Setzt reinen Text
-                }
-                
-                messageBox.classList.add('show');
-                closeMessageButton.classList.toggle('hidden', showConfirmButtons || showBackToStartButton); // Schließen-Button ausblenden, wenn andere Buttons da sind
-                confirmYesButton.classList.toggle('hidden', !showConfirmButtons);
-                confirmNoButton.classList.toggle('hidden', !showConfirmButtons);
-                backToStartFromFinalButton.classList.toggle('hidden', !showBackToStartButton); // Neuen Button anzeigen/verbergen
-
-                // Event-Listener für die Buttons
-                const handleClose = () => {
-                    hideMessage();
-                    resolve(false); // Default: false, wenn einfach geschlossen
-                };
-                const handleYes = () => {
-                    hideMessage();
-                    resolve(true);
-                };
-                const handleNo = () => {
-                    hideMessage();
-                    resolve(false);
-                };
-                const handleBackToStart = () => {
-                    hideMessage();
-                    showPage(introPage); // Zurück zur Startseite
-                    
-                    // Reset game state for a fresh start
-                    stopwatchStartTime = 0; // Stoppuhr-Startzeit zurücksetzen
-                    stopwatchEndTime = 0; // Endzeit zurücksetzen
-                    gameSessionActive = false; // Spiel ist nicht mehr aktiv
-                    stopStopwatch(); // Sicherstellen, dass der Timer gestoppt ist
-                    localStorage.removeItem('stopwatchStartTime'); // Local Storage löschen
-                    
-                    stationsData.forEach(station => {
-                        station.unlocked = false;
-                        station.selectedOption = null;
-                        station.submitted = false;
-                    });
-                    renderTable(); // Tabelle neu rendern, um Status zurückzusetzen
-                    updateStopwatchDisplay(); // Anzeige auf 00:00 setzen
-                    gameSummaryDiv.classList.add('hidden'); // Zusammenfassung ausblenden
-                    resolve(true); // Kann auch true sein, da es eine beabsichtigte Aktion ist
-                };
-
-                // Entferne alte Listener, um doppelte Aufrufe zu vermeiden
-                closeMessageButton.removeEventListener('click', handleClose);
-                confirmYesButton.removeEventListener('click', handleYes);
-                confirmNoButton.removeEventListener('click', handleNo);
-                backToStartFromFinalButton.removeEventListener('click', handleBackToStart);
-
-                // Füge neue Listener hinzu
-                closeMessageButton.addEventListener('click', handleClose);
-                confirmYesButton.addEventListener('click', handleYes);
-                confirmNoButton.addEventListener('click', handleNo);
-                backToStartFromFinalButton.addEventListener('click', handleBackToStart);
-            });
-        }
-
-        /**
-         * Verbirgt die Meldungsbox.
-         */
-        function hideMessage() {
-            messageBox.classList.remove('show');
-        }
-
-
-        /**
-         * Rendert die Spieltabelle basierend auf den aktuellen Daten in `stationsData`.
-         */
-        function renderTable() {
-            tableBody.innerHTML = ''; // Leert den aktuellen Tabelleninhalt
-
-            stationsData.forEach((station, index) => {
-                const row = document.createElement('tr'); // Erstellt eine neue Tabellenzeile
-
-                // Zelle für den Stationsnamen
-                const stationTd = document.createElement('td');
-                stationTd.className = 'px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900';
-                stationTd.textContent = station.station;
-                row.appendChild(stationTd);
-
-                // Zelle für den Code-Eingabebereich
-                const codeTd = document.createElement('td');
-                codeTd.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
-
-                // Eingabefeld für den Code
-                const codeInput = document.createElement('input');
-                codeInput.type = 'text';
-                codeInput.placeholder = 'Code eingeben';
-                codeInput.className = 'border border-gray-300 rounded-md p-2 w-32 mr-2 focus:ring-blue-500 focus:border-blue-500';
-                codeInput.setAttribute('data-index', index);
-                // Deaktiviert, wenn entsperrt, abgegeben oder Spiel nicht aktiv ist
-                codeInput.disabled = station.unlocked || station.submitted || !gameSessionActive; 
-                codeTd.appendChild(codeInput);
-
-                // Button zum Entsperren der Optionen
-                const unlockButton = document.createElement('button');
-                unlockButton.textContent = 'Entsperren';
-                unlockButton.className = 'px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50';
-                // Deaktiviert, wenn entsperrt, abgegeben oder Spiel nicht aktiv ist
-                unlockButton.disabled = station.unlocked || station.submitted || !gameSessionActive; 
-                unlockButton.onclick = () => {
-                    // Nichts tun, wenn das Spiel nicht aktiv ist, beendet oder bereits abgegeben ist
-                    if (!gameSessionActive || station.submitted) return; 
-                    const enteredCode = codeInput.value.trim();
-                    if (enteredCode === station.code) {
-                        // Wenn dies der erste Code ist, der eingegeben wird, starte die Zeitmessung
-                        if (stopwatchStartTime === 0) {
-                            stopwatchStartTime = Date.now();
-                            localStorage.setItem('stopwatchStartTime', stopwatchStartTime.toString());
-                            startStopwatch(); // Sicherstellen, dass das Interval läuft
-                        }
-
-                        stationsData[index].unlocked = true;
-                        renderTable(); // Tabelle neu rendern, um Änderungen anzuzeigen
-                        showMessage(`Code für "${station.station}" korrekt! Auswahlfeld ist freigeschaltet.`);
-                        updateStopwatchDisplay(); // Anzeige sofort aktualisieren
-                    } else {
-                        showMessage('Falscher Code! Bitte versuchen Sie es erneut.');
-                        codeInput.value = '';
-                    }
-                };
-                codeTd.appendChild(unlockButton);
-                row.appendChild(codeTd);
-
-                // Zelle für das Dropdown-Feld "Auswahl"
-                const selectionTd = document.createElement('td');
-                selectionTd.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
-
-                const selectElement = document.createElement('select');
-                selectElement.className = 'select-field';
-                // Deaktiviert, wenn nicht freigeschaltet, eingereicht oder Spiel nicht aktiv ist
-                selectElement.disabled = !station.unlocked || station.submitted || !gameSessionActive; 
-
-                const defaultOption = document.createElement('option');
-                defaultOption.value = '';
-                defaultOption.textContent = 'Bitte wählen...';
-                selectElement.appendChild(defaultOption);
-
-                const selectOptions = ['A', 'B', 'C', 'D', 'E'];
-                selectOptions.forEach(opt => {
-                    const option = document.createElement('option');
-                    option.value = opt;
-                    option.textContent = opt; // Zeigt nur den Buchstaben an
-                    selectElement.appendChild(option);
-                });
-
-                if (station.selectedOption) {
-                    selectElement.value = station.selectedOption;
-                }
-
-                selectElement.onchange = (event) => {
-                    if (!gameSessionActive || station.submitted) return; // Nichts tun, wenn das Spiel nicht aktiv ist oder bereits abgegeben ist
-                    stationsData[index].selectedOption = event.target.value;
-                };
-
-                selectionTd.appendChild(selectElement);
-                row.appendChild(selectionTd);
-
-                // Zelle für den "Abgeben"-Button
-                const actionTd = document.createElement('td');
-                actionTd.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
-
-                const submitButton = document.createElement('button');
-                submitButton.textContent = station.submitted ? 'Abgegeben' : 'Abgeben'; // Text ändern, wenn abgegeben
-                submitButton.className = `px-3 py-2 text-white rounded-md transition duration-200 focus:outline-none focus:ring-2 focus:ring-opacity-50 ${
-                    station.submitted ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-500 hover:bg-purple-600 focus:ring-purple-500'
-                }`;
-                // Button deaktiviert, wenn nicht freigeschaltet, bereits abgegeben oder Spiel nicht aktiv ist
-                submitButton.disabled = !station.unlocked || station.submitted || !gameSessionActive;
-                submitButton.onclick = async () => {
-                    if (!gameSessionActive || station.submitted) return; // Nichts tun, wenn das Spiel nicht aktiv ist oder bereits abgegeben ist
-                    // HIER die Änderung: Verwende window.db und window.currentUserId
-                    if (!window.db || !window.currentUserId) {
-                        showMessage('Datenbank oder Benutzer nicht verfügbar. Bitte warten Sie, bis Firebase initialisiert ist.');
-                        return;
-                    }
-
-                    if (station.selectedOption) {
-                        const confirm = await showMessage(`Möchten Sie Option "${station.selectedOption}" für "${station.station}" wirklich abgeben?`, true);
-                        if (confirm) {
-                            try {
-                                // HIER die Änderung: Verwende window.db
-                                const submissionsRef = collection(window.db, `/artifacts/${appId}/public/data/submissions`);
-                                await addDoc(submissionsRef, {
-                                    userId: window.currentUserId, // HIER die Änderung: Verwende window.currentUserId
-                                    station: station.station,
-                                    selectedOption: station.selectedOption,
-                                    timestamp: serverTimestamp() // Firestore-Timestamp hinzufügen
-                                });
-                                stationsData[index].submitted = true; // Markiere als lokal abgegeben
-                                renderTable(); // Tabelle neu rendern, um Statusänderung anzuzeigen
-                                showMessage(`Option "${station.selectedOption}" für "${station.station}" erfolgreich abgegeben und gespeichert!`);
-                            } catch (e) {
-                                console.error("Fehler beim Speichern der Abgabe:", e);
-                                showMessage('Fehler beim Speichern der Abgabe. Bitte versuchen Sie es erneut.');
-                            }
-                        }
-                    } else {
-                        showMessage('Bitte wählen Sie eine Option, bevor Sie abgeben.');
-                    }
-                };
-                actionTd.appendChild(submitButton);
-                row.appendChild(actionTd);
-
-                tableBody.appendChild(row);
-            });
-        }
-
-        /**
-         * Rendert die Admin-Datentabelle basierend auf den abgerufenen Firestore-Daten.
-         * @param {Array<Object>} submissions - Eine Liste der abgegebenen Daten von Firestore.
-         */
-        function renderAdminTable(submissions) {
-            adminDataTableBody.innerHTML = ''; // Leert den aktuellen Tabelleninhalt
-
-            if (submissions.length === 0) {
-                const noDataRow = document.createElement('tr');
-                noDataRow.innerHTML = `<td colspan="4" class="px-6 py-4 text-center text-gray-500">
-                    Noch keine Abgaben vorhanden.
-                </td>`;
-                adminDataTableBody.appendChild(noDataRow);
-                return;
-            }
-
-            submissions.forEach(submission => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 break-all">${submission.userId || 'Unbekannt'}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${submission.station}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${submission.selectedOption}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${submission.timestamp ? new Date(submission.timestamp.seconds * 1000).toLocaleString() : 'N/A'}</td>
-                `;
-                adminDataTableBody.appendChild(row);
-            });
-        }
-
-        /**
-         * Beendet das Spiel und zeigt eine Zusammenfassung an.
-         */
-        async function endGame() {
-            if (!gameSessionActive) return; // Verhindert mehrfaches Beenden, wenn Spiel nicht aktiv
-
-            const confirmEnd = await showMessage('Möchten Sie das Spiel wirklich beenden?', true);
-
-            if (confirmEnd) {
-                gameSessionActive = false; // Spiel ist beendet
-                stopStopwatch(); // Stoppuhr anhalten
-                localStorage.removeItem('stopwatchStartTime'); // Startzeit aus Local Storage entfernen
-
-                // Nur berechnen und anzeigen, wenn stopwatchStartTime gesetzt wurde
-                if (stopwatchStartTime !== 0) {
-                    stopwatchEndTime = Date.now(); // Endzeitpunkt setzen
-                    const finalTimeElapsed = Math.floor((stopwatchEndTime - stopwatchStartTime) / 1000);
-
-                    // Aktualisiere den Zusammenfassungs-Div
-                    summaryStartTimeSpan.textContent = new Date(stopwatchStartTime).toLocaleString();
-                    summaryEndTimeSpan.textContent = new Date(stopwatchEndTime).toLocaleString();
-                    summaryDurationSpan.textContent = formatTime(finalTimeElapsed);
-                    gameSummaryDiv.classList.remove('hidden'); // Zusammenfassungs-Div anzeigen
-
-                    let submittedCount = 0;
-                    stationsData.forEach(station => {
-                        if (station.submitted) {
-                            submittedCount++;
-                        }
-                    });
-
-                    // Aktualisierte und formatierte Dankesnachricht
-                    const finalMessage = `
-                        <p class="text-xl font-bold mb-4">Vielen Dank für Ihre Teilnahme!</p>
-                        <p class="text-base mb-2">Sie haben ${submittedCount} von ${stationsData.length} Stationen abgegeben.</p>
-                        <p class="text-base mb-4">Ihre Gesamtzeit: <span class="font-bold">${formatTime(finalTimeElapsed)}</span></p>
-                        <p class="text-lg text-blue-700 font-semibold mb-4">Die Gewinner werden am Samstag, den 28. September 2025 ab 11 Uhr im Tutti Kiesi bekannt gegeben, schauen Sie gerne vorbei!</p>
-                        <p class="text-base">Um nichts mehr zu verpassen, folgen Sie uns jetzt auf Instagram!</p>
-                    `;
-                    showMessage(finalMessage, false, true, true);
-                } else {
-                    // Fall, dass Spiel beendet wurde, aber nie ein Code eingegeben wurde
-                    showMessage('Das Spiel wurde beendet. Es wurde jedoch keine Zeitmessung gestartet, da kein Code eingegeben wurde.', false, false, true);
-                    gameSummaryDiv.classList.add('hidden'); // Zusammenfassung ausblenden, da keine Daten
-                }
-                
-                // Alle Eingaben und Buttons deaktivieren
-                renderTable(); // Tabelle neu rendern, um alle Elemente zu deaktivieren
-                endGameButton.disabled = true; // Spiel beenden Button deaktivieren
-            }
-        }
-
-        // --- Event-Listener ---
-
-        // Beim Laden der Seite: Prüfen, ob ein Spiel aktiv war und Stoppuhr fortsetzen
-        window.addEventListener('load', () => {
-            const storedStartTime = localStorage.getItem('stopwatchStartTime');
-
-            if (storedStartTime) {
-                stopwatchStartTime = parseInt(storedStartTime);
-                gameSessionActive = true; // Spiel war aktiv, fortsetzen
-                updateStopwatchDisplay(); // Sofortige Anzeige der korrekten Zeit
-                startStopwatch(); // Timer-Intervall starten
-            } else {
-                updateStopwatchDisplay(); // Anzeige auf 00:00 setzen
-            }
-            // Sicherstellen, dass die Tabelle bei Seitenlast im richtigen Zustand ist
-            renderTable();
-            gameSummaryDiv.classList.add('hidden'); // Verstecke die Zusammenfassung beim Laden
-        });
-
-        // Speichere den Startzeitpunkt im Local Storage, bevor der Browser geschlossen wird
-        window.addEventListener('beforeunload', () => {
-            if (gameSessionActive && stopwatchStartTime !== 0) { // Nur speichern, wenn das Spiel aktiv ist und eine Messung gestartet wurde
-                localStorage.setItem('stopwatchStartTime', stopwatchStartTime.toString()); 
-            }
-        });
-
-        startGameButton.addEventListener('click', () => {
-            if (!gameSessionActive) { // Nur wenn keine Spielsitzung aktiv ist
-                // stopwatchStartTime bleibt 0, wird erst beim ersten Code-Eingabe gesetzt
-                gameSessionActive = true; // Spielsitzung wird aktiv
-                endGameButton.disabled = false; // "Spiel beenden" Button aktivieren
-            }
-            showPage(gamePage); // Spielseite anzeigen
-            renderTable(); // Tabelle zum ersten Mal rendern (oder neu rendern)
-            updateStopwatchDisplay(); // Anzeige aktualisieren
-            startStopwatch(); // Stoppuhr starten (oder sicherstellen, dass sie läuft)
-        });
-
-        // Event-Listener für das anklickbare Wort "Wähle"
-        openAdminTrigger.addEventListener('click', async () => { // Async hinzufügen, da fetch() im Admin Login verwendet wird
-            showPage(adminLoginPage); // Admin Login Seite anzeigen
-        });
-
-        backToIntroFromAdminLoginButton.addEventListener('click', () => {
-            showPage(introPage); // Zurück zur Startseite
-            adminUsernameInput.value = ''; // Felder leeren
-            adminPasswordInput.value = '';
-        });
-
-        backToIntroFromAdminDataButton.addEventListener('click', () => {
-            showPage(introPage); // Zurück zur Startseite
-        });
-
-        loginButton.addEventListener('click', async () => {
-            const username = adminUsernameInput.value;
-            const password = adminPasswordInput.value;
-
-            if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-                showMessage('Admin Login erfolgreich!');
-                showPage(adminDataPage); // Admin Daten Seite anzeigen
-                // Firestore-Listener für Admin-Daten einrichten
-                // HIER die Änderung: Verwende window.db und window.currentUserId direkt
-                if (window.db && window.currentUserId) { 
-                    const submissionsCollection = collection(window.db, `/artifacts/${appId}/public/data/submissions`); 
-                    onSnapshot(submissionsCollection, (snapshot) => {
-                        const submittedItems = [];
-                        snapshot.forEach(doc => {
-                            submittedItems.push(doc.data());
-                        });
-                        renderAdminTable(submittedItems); // Admin-Tabelle aktualisieren
-                    }, (error) => {
-                        console.error("Fehler beim Abrufen der Admin-Daten:", error);
-                        showMessage('Fehler beim Laden der Admin-Daten.');
-                    });
-                } else {
-                    showMessage('Datenbank oder Benutzer nicht verfügbar. Bitte warten Sie, bis Firebase initialisiert ist.');
-                }
-            } else {
-                showMessage('Benutzername oder Passwort falsch. Bitte versuchen Sie es erneut.');
-                adminPasswordInput.value = ''; // Passwortfeld leeren
-            }
-        });
-
-        endGameButton.addEventListener('click', endGame);
-    </script>
 </body>
 </html>
